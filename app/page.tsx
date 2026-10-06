@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import BrandHeader from "@/components/BrandHeader";
 import Camera from "@/components/Camera";
 import { APP, FACE } from "@/config/app.config";
 import { TERMS_OF_USE } from "@/config/messages";
@@ -221,14 +222,15 @@ export default function Home() {
 
   return (
     <main className="wrap">
-      <header className="head">
-        <h1>{APP.name}</h1>
-        <p className="muted">{clock}</p>
-      </header>
+      <BrandHeader title="Absensi karyawan" subtitle={clock || " "} />
 
       <section className="card">
         {step === "pick" && (
           <>
+            <div>
+              <h2>Selamat datang</h2>
+              <p className="muted">Pilih nama kamu untuk absen masuk.</p>
+            </div>
             <label htmlFor="nama">Nama karyawan</label>
             {loadError ? (
               <p className="note error">{loadError}</p>
@@ -244,8 +246,8 @@ export default function Home() {
               </select>
             )}
             {person && (
-              <p className="muted">
-                Cabang {person.cabangName} · jam masuk {person.openTime} {APP.timezoneLabel} · absen dibuka {person.opensAt}
+              <p className="info-line">
+                <span>Cabang <b>{person.cabangName}</b></span>·<span>Masuk <b>{person.openTime}</b></span>·<span>Absen dibuka <b>{person.opensAt}</b></span>
               </p>
             )}
             <button className="primary" onClick={next} disabled={!people}>
@@ -304,6 +306,7 @@ export default function Home() {
         {step === "result" && result && (
           <>
             <div className={`result ${result.kind}`}>
+              <span className="result-icon" aria-hidden="true">{result.kind === "ok" ? "✓" : result.kind === "late" ? "!" : "i"}</span>
               <p className="result-title">{result.title}</p>
               <p>{result.detail}</p>
             </div>
@@ -315,6 +318,7 @@ export default function Home() {
 
         {msg && <p className={`note ${msg.error ? "error" : ""}`}>{msg.text}</p>}
       </section>
+      <p className="footer">© Barberworks · {APP.timezoneLabel}</p>
     </main>
   );
 }

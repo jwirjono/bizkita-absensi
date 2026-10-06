@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { APP } from "@/config/app.config";
+import BrandHeader from "@/components/BrandHeader";
 
 type Rec = { id: string; name: string; time: string; openTime: string; cabangId: string; late: boolean; lateMinutes: number; distanceMeters: number; faceDistance: number };
 type Row = { id: string; name: string; present: number; lateCount: number; lateMinutes: number };
@@ -124,9 +124,7 @@ export default function Admin() {
   if (!authed) {
     return (
       <main className="wrap">
-        <header className="head">
-          <h1>Admin · {APP.name}</h1>
-        </header>
+        <BrandHeader title="Admin absensi" subtitle="Masukkan PIN admin" />
         <form className="card" onSubmit={(e) => (e.preventDefault(), login())}>
           <label htmlFor="pin">PIN admin</label>
           <input id="pin" type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} autoFocus />
@@ -141,12 +139,15 @@ export default function Admin() {
 
   return (
     <main className="wrap wide">
-      <header className="head row">
-        <h1>Admin · {APP.name}</h1>
-        <button className="ghost small" onClick={() => (sessionStorage.removeItem(PIN_KEY), location.reload())}>
-          Keluar
-        </button>
-      </header>
+      <BrandHeader
+        title="Admin absensi"
+        subtitle="Absen harian, rekap, dan data wajah"
+        action={
+          <button className="ghost small" onClick={() => (sessionStorage.removeItem(PIN_KEY), location.reload())}>
+            Keluar
+          </button>
+        }
+      />
       {notice && <p className={`note ${notice.error ? "error" : ""}`}>{notice.text}</p>}
 
       <section className="card">
