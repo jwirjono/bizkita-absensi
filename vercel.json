@@ -3,7 +3,7 @@
   "regions": ["sin1"],
   "crons": [
     {
-      "path": "/api/cron/daily",
+      "path": "/api/cron/notify",
       "schedule": "0 5 * * *"
     }
   ]

@@ -11,6 +11,8 @@ type Person = {
   name: string;
   cabangName: string;
   openTime: string;
+  opensAt: string;
+  canAbsenNow: boolean;
   enrolled: boolean;
   absen: { time: string; late: boolean; lateMinutes: number; cabangName: string } | null;
 };
@@ -115,6 +117,8 @@ export default function Home() {
         detail: `Jam ${person.absen.time} di ${person.absen.cabangName}${person.absen.late ? ` · telat ${person.absen.lateMinutes} menit` : ""}.`,
       });
       setStep("result");
+    } else if (person.enrolled && !person.canAbsenNow) {
+      setMsg({ text: `Absen ${person.name} baru dibuka jam ${person.opensAt} (jam masuk ${person.openTime}).`, error: true });
     } else if (person.enrolled) {
       setStep("absen");
       startGps();
@@ -241,7 +245,7 @@ export default function Home() {
             )}
             {person && (
               <p className="muted">
-                Cabang {person.cabangName} · jam masuk {person.openTime} {APP.timezoneLabel}
+                Cabang {person.cabangName} · jam masuk {person.openTime} {APP.timezoneLabel} · absen dibuka {person.opensAt}
               </p>
             )}
             <button className="primary" onClick={next} disabled={!people}>

@@ -11,9 +11,11 @@ Simple attendance app: pick name → selfie (face match) + GPS → on time / tel
 |---|---|
 | Cabang (location, radius, jam buka, toleransi) | `config/app.config.ts` → `CABANG` |
 | Karyawan list | `config/app.config.ts` → `KARYAWAN` |
-| Face strictness, GPS accuracy, WhatsApp on/off, data retention | `config/app.config.ts` |
+| WhatsApp group per cabang | `config/app.config.ts` → `CABANG[].whatsappGroup` |
+| Rekap telat group and time (12:00) | `config/app.config.ts` → `WHATSAPP.rekapTelat` |
+| Absen opens X minutes before jam masuk | `config/app.config.ts` → `ABSEN.opensMinutesBefore` |
+| Face strictness, GPS accuracy, data retention | `config/app.config.ts` |
 | WhatsApp message text, Terms of Use | `config/messages.ts` |
-| Daily summary time | `vercel.json` → `crons.schedule` (UTC! 12:00 WIB = `0 5 * * *`) |
 | Secrets (Redis, admin PIN, WhatsApp key) | Vercel → Settings → Environment Variables (see `.env.example`) |
 
 After editing a file: commit and push. Vercel redeploys automatically.
@@ -44,14 +46,25 @@ Set `active: false` (keeps their history in reports). Then reset their face in `
 4. **Environment variables** (Vercel → Settings → Environment Variables, tick Production):
    - `ADMIN_PIN` — your admin PIN
    - `FONNTE_TOKEN` — from step 3
-   - `WHATSAPP_TARGETS` — numbers and/or group IDs, comma-separated, e.g. `081514174883,120363012345678901@g.us`
    - `CRON_SECRET` — any long random string
 5. **Real coordinates:** replace the `lat`/`lng` placeholders in `CABANG`.
-6. Redeploy, then open `/admin`:
-   - WhatsApp → "Tampilkan tujuan dan grup WhatsApp" lists your groups with their IDs (copy into `WHATSAPP_TARGETS`, redeploy).
-   - Press "Kirim ringkasan ke WhatsApp" to test.
+6. **Group IDs:** add the sender number to each group, redeploy, open `/admin` → WhatsApp →
+   "Tampilkan tujuan dan grup WhatsApp", copy each group ID into `config/app.config.ts`
+   (`CABANG[].whatsappGroup` and `WHATSAPP.rekapTelat.group`), push.
+   Test with the "Kirim … sekarang" buttons on `/admin`.
+7. **Scheduler (cron-job.org, free):** Vercel Hobby cron can be up to 59 minutes late, so use cron-job.org for exact times:
+   - Create a cronjob: URL `https://bizkita-absensi.vercel.app/api/cron/notify`, every **5 minutes**.
+   - Advanced → Headers → add `Authorization` = `Bearer <your CRON_SECRET>`.
+   - The endpoint sends each message once a day as soon as its time is reached, so calling it often is safe.
+   - The Vercel cron in `vercel.json` (12:00–12:59 WIB) stays as a backup for the rekap telat.
 
-Fonnte free plan: 1,000 messages/month (each target counts), with a small Fonnte watermark. Lite (Rp 25k) removes it.
+## WhatsApp messages (only these, once a day each)
+
+- **Each cabang at its jam buka** → its own group: "Jangan lupa absen" link + absen list of that cabang.
+- **Rekap telat at 12:00** → rekap group: who was telat per cabang + who hasn't absen. On the last day of the month the monthly recap is added to this message.
+
+Instant late/new-face alerts are off (`WHATSAPP.sendLateAlert`, `sendEnrollAlert`).
+Fonnte free plan: 1,000 messages/month, with a small Fonnte watermark. Lite (Rp 25k) removes it.
 
 ## How it works
 
@@ -60,13 +73,13 @@ Fonnte free plan: 1,000 messages/month (each target counts), with a small Fonnte
   First-time registration takes 3 photos automatically, then goes straight into absen.
 - **Face:** `face-api.js` runs in the phone browser and turns the selfie into 128 numbers. The server compares them with
   the 3 samples saved at registration. Registration happens once per name. Only admin can reset it.
-  A face that's already registered to another name is rejected, and the owner gets a WhatsApp message on every new registration.
+  A face that's already registered to another name is rejected.
 - **GPS:** the server checks the distance to the karyawan's own cabang and rejects absen outside its `radiusMeters`.
 - **Time:** always the server clock in WIB, so changing the phone clock does nothing.
+- **Absen window:** opens `ABSEN.opensMinutesBefore` (60) minutes before the karyawan's jam masuk; earlier attempts are rejected.
 - **Telat:** after `openTime + toleranceMinutes` of the karyawan (falls back to the cabang's). "Telat X menit" is counted from `openTime`.
-- **Data:** Upstash Redis. Absen is stored per month (`absen:YYYY-MM`). On the last day of each month the cron sends the recap
-  and deletes months older than `RETENTION.keepPreviousMonths`.
-- **Cron (Vercel Hobby):** runs once a day and may fire any time within the scheduled hour.
+- **Data:** Upstash Redis. Absen is stored per month (`absen:YYYY-MM`). On the last day of each month, after the rekap is sent,
+  months older than `RETENTION.keepPreviousMonths` are deleted.
 
 ## Local development
 

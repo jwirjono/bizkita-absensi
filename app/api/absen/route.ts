@@ -1,12 +1,12 @@
 import { after } from "next/server";
-import { GPS, WHATSAPP } from "@/config/app.config";
+import { ABSEN, GPS, WHATSAPP } from "@/config/app.config";
 import { lateAlertMessage } from "@/config/messages";
 import { evaluateLate, saveAbsen, type AbsenRecord } from "@/lib/attendance";
 import { bestDistance, getFace, isDescriptor, isMatch } from "@/lib/face";
 import { distanceMeters } from "@/lib/geo";
 import { fail, handle, ok } from "@/lib/http";
 import { findKaryawan, scheduleFor } from "@/lib/karyawan";
-import { nowParts } from "@/lib/time";
+import { fromMinutes, nowParts, toMinutes } from "@/lib/time";
 import { sendWhatsApp } from "@/lib/whatsapp";
 
 /** Absen masuk: verify GPS → verify face → save (once per day) → WhatsApp if telat. */
@@ -14,6 +14,14 @@ export const POST = handle(async (req) => {
   const body = await req.json().catch(() => ({}));
   const k = findKaryawan(body.id);
   if (!k) return fail("Karyawan tidak ditemukan.");
+  const { cabang, openTime, toleranceMinutes } = scheduleFor(k);
+  const now = nowParts();
+
+  // 0. Absen window: opens ABSEN.opensMinutesBefore before jam masuk
+  const opensAt = toMinutes(openTime) - ABSEN.opensMinutesBefore;
+  if (now.minutes < opensAt) {
+    return fail(`Absen ${k.name} baru dibuka jam ${fromMinutes(opensAt)} (${ABSEN.opensMinutesBefore} menit sebelum jam masuk ${openTime}).`);
+  }
 
   // 1. GPS
   const { lat, lng, accuracy } = body;
@@ -23,7 +31,6 @@ export const POST = handle(async (req) => {
   if (accuracy > GPS.maxAccuracyMeters) {
     return fail(`Sinyal GPS kurang akurat (±${Math.round(accuracy)} m). Coba di dekat pintu/luar ruangan lalu ulangi.`);
   }
-  const { cabang, openTime, toleranceMinutes } = scheduleFor(k);
   const distance = distanceMeters(lat, lng, cabang.lat, cabang.lng);
   if (distance > cabang.radiusMeters) {
     return fail(`Kamu berada ${Math.round(distance)} m dari cabang ${cabang.name}. ${k.name} hanya bisa absen di cabang ${cabang.name}.`);
@@ -39,7 +46,6 @@ export const POST = handle(async (req) => {
   }
 
   // 3. Save
-  const now = nowParts();
   const { late, lateMinutes } = evaluateLate(openTime, toleranceMinutes, now.minutes);
   const record: AbsenRecord = {
     id: k.id,
@@ -59,7 +65,7 @@ export const POST = handle(async (req) => {
 
   // 4. Notify
   if (late && WHATSAPP.sendLateAlert) {
-    after(() => sendWhatsApp(lateAlertMessage({ name: k.name, cabang: cabang.name, openTime, time: now.time, lateMinutes })));
+    after(() => sendWhatsApp(WHATSAPP.rekapTelat.group, lateAlertMessage({ name: k.name, cabang: cabang.name, openTime, time: now.time, lateMinutes })));
   }
   return ok({ record });
 });

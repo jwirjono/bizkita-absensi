@@ -1,5 +1,5 @@
-import { CABANG } from "@/config/app.config";
-import { dailySummaryMessage, monthlyRecapMessage } from "@/config/messages";
+import { CABANG, WHATSAPP } from "@/config/app.config";
+import { monthlyRecapMessage, openingMessage, rekapTelatMessage } from "@/config/messages";
 import { buildDailyReport, buildMonthlyRows, deleteAbsen, getDayRecords, getMonthRecords } from "@/lib/attendance";
 import { buildMonthWorkbook } from "@/lib/excel";
 import { enrolledIds, resetFace } from "@/lib/face";
@@ -7,7 +7,7 @@ import { fail, handle, isAdmin, ok } from "@/lib/http";
 import { activeKaryawan, karyawanName, scheduleFor } from "@/lib/karyawan";
 import { KEYS, redis } from "@/lib/redis";
 import { isDate, isMonth, monthLabel, nowParts } from "@/lib/time";
-import { listWhatsAppGroups, sendWhatsApp, whatsAppTargets } from "@/lib/whatsapp";
+import { configuredTargets, listWhatsAppGroups, sendWhatsApp } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,7 @@ export const GET = handle(async (req) => {
   }
   if (action === "whatsapp") {
     const g = await listWhatsAppGroups();
-    return ok({ targets: whatsAppTargets(), groups: g.groups ?? [], groupError: g.error ?? null });
+    return ok({ targets: configuredTargets(), groups: g.groups ?? [], groupError: g.error ?? null });
   }
   if (action === "photo") {
     const id = q.get("id") ?? "";
@@ -73,8 +73,9 @@ export const GET = handle(async (req) => {
  * POST { action }
  *   resetFace   { id }          → delete face data so karyawan can onboard again
  *   deleteAbsen { date, id }    → remove a wrong absen record
- *   sendDaily   { date }        → send daily summary to WhatsApp now
- *   sendMonthly { month }       → send monthly recap to WhatsApp now
+ *   sendOpening { date, cabangId } → send that cabang's absen list to its group now
+ *   sendDaily   { date }           → send rekap telat to the rekap group now
+ *   sendMonthly { month }          → send monthly recap to the rekap group now
  */
 export const POST = handle(async (req) => {
   if (!isAdmin(req)) return fail("PIN admin salah.", 401);
@@ -89,14 +90,23 @@ export const POST = handle(async (req) => {
       if (!isDate(body.date) || typeof body.id !== "string") return fail("Data tidak valid.");
       await deleteAbsen(body.date, body.id);
       return ok({ message: "Absen dihapus." });
+    case "sendOpening": {
+      if (!isDate(body.date)) return fail("Tanggal tidak valid.");
+      const c = CABANG.find((x) => x.id === body.cabangId);
+      if (!c) return fail("Cabang tidak ditemukan.");
+      const report = await buildDailyReport(body.date);
+      const day = report.cabang.find((x) => x.id === c.id)!;
+      const r = await sendWhatsApp(c.whatsappGroup, openingMessage(day, report.dateLabel, WHATSAPP.appUrl));
+      return r.ok ? ok({ message: `Absensi ${c.name} terkirim.` }) : fail(r.error ?? "Gagal kirim.", 502);
+    }
     case "sendDaily": {
       if (!isDate(body.date)) return fail("Tanggal tidak valid.");
-      const r = await sendWhatsApp(dailySummaryMessage(await buildDailyReport(body.date)));
-      return r.ok ? ok({ message: "Ringkasan terkirim." }) : fail(r.error ?? "Gagal kirim.", 502);
+      const r = await sendWhatsApp(WHATSAPP.rekapTelat.group, rekapTelatMessage(await buildDailyReport(body.date)));
+      return r.ok ? ok({ message: "Rekap telat terkirim." }) : fail(r.error ?? "Gagal kirim.", 502);
     }
     case "sendMonthly": {
       if (!isMonth(body.month)) return fail("Bulan tidak valid.");
-      const r = await sendWhatsApp(monthlyRecapMessage(monthLabel(body.month), await buildMonthlyRows(body.month)));
+      const r = await sendWhatsApp(WHATSAPP.rekapTelat.group, monthlyRecapMessage(monthLabel(body.month), await buildMonthlyRows(body.month)));
       return r.ok ? ok({ message: "Rekap terkirim." }) : fail(r.error ?? "Gagal kirim.", 502);
     }
   }

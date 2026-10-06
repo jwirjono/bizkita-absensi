@@ -27,6 +27,7 @@ export const APP = {
 //    - radiusMeters: how far from the shop karyawan may absen (1000 = 1 km).
 //    - openTime: jam buka (HH:mm, 24h).
 //    - toleranceMinutes: absen after openTime + tolerance = TELAT.
+//    - whatsappGroup: group ID that receives the daily absen list at openTime.
 //      "Telat X menit" is counted from openTime.
 // ------------------------------------------------------------
 export type Cabang = {
@@ -37,26 +38,30 @@ export type Cabang = {
   radiusMeters: number;
   openTime: string;
   toleranceMinutes: number;
+  /** WhatsApp group that gets this cabang's message at openTime. Find IDs on /admin → WhatsApp. */
+  whatsappGroup: string;
 };
 
 export const CABANG: Cabang[] = [
   {
     id: "tubagus",
     name: "Tubagus",
-    lat: -6.865756666417696, // TODO: replace with real coordinates
-    lng: 109.13411926216462,
-    radiusMeters: 100, // 1 km
+    lat: -6.883917916145388,  // TODO: replace with real coordinates
+    lng: 107.61464297566627,
+    radiusMeters: 200,
     openTime: "10:00",
     toleranceMinutes: 15,
+    whatsappGroup: "120363417213352511@g.us", // e.g. "120363012345678901@g.us"
   },
   {
     id: "rancabolang",
     name: "Rancabolang",
-    lat: -6.9455, // TODO: replace with real coordinates
-    lng: 107.6633,
-    radiusMeters: 100, // 1 km
+    lat: -6.947712224687879,  // TODO: replace with real coordinates
+    lng: 107.66266731524868,
+    radiusMeters: 200,
     openTime: "09:00",
     toleranceMinutes: 15,
+    whatsappGroup: "120363322320817802@g.us", // e.g. "120363012345678901@g.us"
   },
 ];
 
@@ -80,9 +85,12 @@ export type Karyawan = {
 };
 
 export const KARYAWAN: Karyawan[] = [
-  { id: "jevon", name: "Jevon", cabang: "tubagus", active: true },
-  { id: "budi", name: "Budi", cabang: "tubagus", openTime: "11:00", active: true },
-  { id: "sari", name: "Sari", cabang: "rancabolang", active: true },
+  { id: "bryan", name: "Bryan", cabang: "tubagus", active: true },
+  { id: "galih", name: "Galih", cabang: "tubagus", active: true },
+  { id: "didi", name: "Didi", cabang: "tubagus", active: true },
+  { id: "septian", name: "Septian", cabang: "tubagus", openTime: "11:00", active: true },
+  { id: "duki", name: "Duki", cabang: "rancabolang", active: true },
+  { id: "feriyan", name: "Feriyan", cabang: "rancabolang", active: true },
   // { id: "rina", name: "Rina", cabang: "rancabolang", openTime: "13:00", toleranceMinutes: 10, active: true },
 ];
 
@@ -126,21 +134,42 @@ export const GPS = {
 };
 
 // ------------------------------------------------------------
-// 6. WHATSAPP (via Fonnte)
-//    WHO receives messages (numbers / group IDs) is set in Vercel env WHATSAPP_TARGETS.
-//    Turn individual notifications on/off here.
-//    The daily summary TIME is set in vercel.json ("crons" → "schedule", in UTC).
-//      12:00 WIB = "0 5 * * *"   (WIB = UTC+7)
+// 6. ABSEN WINDOW
+//    opensMinutesBefore: absen opens this many minutes before the karyawan's jam masuk.
+//    60 = karyawan masuk 10:00 can absen from 09:00. Earlier attempts are rejected.
 // ------------------------------------------------------------
-export const WHATSAPP = {
-  sendLateAlert: true, // instant message when someone absen telat
-  sendEnrollAlert: true, // instant message when a new face is registered
-  sendDailySummary: true, // daily summary (cron)
-  sendMonthlyRecap: true, // on the last day of the month (cron)
+export const ABSEN = {
+  opensMinutesBefore: 60,
 };
 
 // ------------------------------------------------------------
-// 7. DATA RETENTION
+// 7. WHATSAPP (via Fonnte — token in Vercel env FONNTE_TOKEN)
+//    Exactly these messages are sent, each once a day:
+//      a) Each cabang, at its openTime → its own whatsappGroup (set in CABANG above):
+//         reminder link + absen list of that cabang.
+//      b) Rekap telat, at rekapTelat.time → rekapTelat.group (all cabang).
+//         On the last day of the month the monthly recap is added to this same message.
+//    Timing: an external scheduler (cron-job.org, see README) calls /api/cron/notify
+//    every 5 minutes; each message is sent once, as soon as its time is reached.
+//    missedWindowMinutes: if the scheduler was down, skip a message that is this late.
+// ------------------------------------------------------------
+export const WHATSAPP = {
+  appUrl: "https://bizkita-absensi.vercel.app/",
+  sendOpeningMessage: true,
+  rekapTelat: {
+    enabled: true,
+    time: "12:00",
+    group: "", // e.g. "120363012345678901@g.us"
+    includeMonthlyOnLastDay: true,
+  },
+  missedWindowMinutes: 120,
+  /** Extra instant messages (to rekapTelat.group). Off = only the daily messages above. */
+  sendLateAlert: false,
+  sendEnrollAlert: false,
+};
+
+// ------------------------------------------------------------
+// 8. DATA RETENTION
 //    Absen data is stored per month. On the last day of each month,
 //    after the recap is sent, months older than this are deleted.
 //    1 = keep this month + last month.

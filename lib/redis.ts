@@ -19,4 +19,5 @@ export const KEYS = {
   facePhoto: (id: string) => `facephoto:${id}`, // small jpeg data URL
   absenMonth: (month: string) => `absen:${month}`, // hash, field = "DD:id"
   absenField: (day: string, id: string) => `${day}:${id}`,
+  sent: (date: string, job: string) => `sent:${date}:${job}`, // marks a daily WhatsApp message as sent
 };

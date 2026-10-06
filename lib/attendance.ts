@@ -1,5 +1,5 @@
 import { CABANG, RETENTION } from "@/config/app.config";
-import { activeKaryawan } from "./karyawan";
+import { activeKaryawan, scheduleFor } from "./karyawan";
 import { KEYS, redis } from "./redis";
 import { dateLabel, shiftMonth, toMinutes } from "./time";
 
@@ -18,10 +18,20 @@ export type AbsenRecord = {
   createdAt: string;
 };
 
+/** One cabang on one day: every active karyawan of that cabang with their absen (or null). */
+export type CabangDay = {
+  id: string;
+  name: string;
+  openTime: string;
+  people: { id: string; name: string; openTime: string; record: AbsenRecord | null }[];
+  rows: AbsenRecord[]; // all absen at this cabang (incl. inactive karyawan)
+  notYet: string[];
+};
+
 export type DailyReport = {
   date: string;
   dateLabel: string;
-  cabang: { id: string; name: string; openTime: string; rows: AbsenRecord[]; notYet: string[] }[];
+  cabang: CabangDay[];
   lateNames: string[];
 };
 
@@ -59,15 +69,22 @@ export async function buildDailyReport(date: string): Promise<DailyReport> {
   return {
     date,
     dateLabel: dateLabel(date),
-    cabang: CABANG.map((c) => ({
-      id: c.id,
-      name: c.name,
-      openTime: c.openTime,
-      rows: records.filter((r) => r.cabangId === c.id),
-      notYet: activeKaryawan()
-        .filter((k) => k.cabang === c.id && !done.has(k.id))
-        .map((k) => k.name),
-    })),
+    cabang: CABANG.map((c) => {
+      const team = activeKaryawan().filter((k) => k.cabang === c.id);
+      return {
+        id: c.id,
+        name: c.name,
+        openTime: c.openTime,
+        people: team.map((k) => ({
+          id: k.id,
+          name: k.name,
+          openTime: scheduleFor(k).openTime,
+          record: records.find((r) => r.id === k.id) ?? null,
+        })),
+        rows: records.filter((r) => r.cabangId === c.id),
+        notYet: team.filter((k) => !done.has(k.id)).map((k) => k.name),
+      };
+    }),
     lateNames: records.filter((r) => r.late).map((r) => r.name),
   };
 }

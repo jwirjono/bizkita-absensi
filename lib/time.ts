@@ -37,6 +37,12 @@ export function toMinutes(hhmm: string) {
   return h * 60 + m;
 }
 
+/** 540 → "09:00" */
+export function fromMinutes(min: number) {
+  const m = ((min % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
 export function isLastDayOfMonth(date: string) {
   const [y, m, d] = date.split("-").map(Number);
   return d === new Date(Date.UTC(y, m, 0)).getUTCDate();

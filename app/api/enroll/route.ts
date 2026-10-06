@@ -31,7 +31,7 @@ export const POST = handle(async (req) => {
   if (!saved) return fail("Wajah untuk nama ini sudah terdaftar. Minta admin untuk reset jika perlu.", 409);
 
   if (WHATSAPP.sendEnrollAlert) {
-    after(() => sendWhatsApp(enrollAlertMessage({ name: k.name, time: `${now.date} ${now.time}` })));
+    after(() => sendWhatsApp(WHATSAPP.rekapTelat.group, enrollAlertMessage({ name: k.name, time: `${now.date} ${now.time}` })));
   }
   return ok({ name: k.name });
 });
