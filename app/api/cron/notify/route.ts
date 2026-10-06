@@ -1,19 +1,21 @@
 import { CABANG, WHATSAPP } from "@/config/app.config";
-import { monthlyRecapMessage, openingMessage, rekapTelatMessage } from "@/config/messages";
+import { cutoffMessage, monthlyRecapMessage, openingMessage, rekapTelatMessage } from "@/config/messages";
 import { buildDailyReport, buildMonthlyRows, cleanupOldMonths } from "@/lib/attendance";
 import { fail, handle, ok } from "@/lib/http";
 import { KEYS, redis } from "@/lib/redis";
-import { isLastDayOfMonth, monthLabel, nowParts, toMinutes } from "@/lib/time";
+import { fromMinutes, isLastDayOfMonth, monthLabel, nowParts, toMinutes } from "@/lib/time";
 import { sendWhatsApp } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
-type Job = { key: string; time: string; run: () => Promise<{ ok: boolean; error?: string }> };
+/** until: optional "HH:mm" after which this job is no longer sent (default: time + missedWindowMinutes). */
+type Job = { key: string; time: string; until?: string; run: () => Promise<{ ok: boolean; error?: string }> };
 
 /**
  * Daily WhatsApp scheduler. Safe to call as often as you like (cron-job.org every 5 minutes):
  * each message is sent ONCE per day, as soon as its time is reached.
  *   - each cabang at its openTime → cabang group (reminder + absen list)
+ *   - each cabang at openTime + toleranceMinutes → cabang group (cutoff + updated list)
  *   - rekap telat at WHATSAPP.rekapTelat.time → rekap group (+ monthly recap on the last day)
  */
 export const GET = handle(async (req) => {
@@ -30,10 +32,28 @@ export const GET = handle(async (req) => {
       jobs.push({
         key: `open:${c.id}`,
         time: c.openTime,
+        // once the cutoff message is due, the opening reminder is no longer useful
+        until: WHATSAPP.sendCutoffMessage ? fromMinutes(toMinutes(c.openTime) + c.toleranceMinutes) : undefined,
         run: async () => {
           const report = await buildDailyReport(now.date);
           const day = report.cabang.find((x) => x.id === c.id)!;
           return sendWhatsApp(c.whatsappGroup, openingMessage(day, report.dateLabel, WHATSAPP.appUrl));
+        },
+      });
+    }
+  }
+
+  if (WHATSAPP.sendCutoffMessage) {
+    for (const c of CABANG) {
+      if (!c.whatsappGroup) continue;
+      const cutoff = fromMinutes(toMinutes(c.openTime) + c.toleranceMinutes);
+      jobs.push({
+        key: `cutoff:${c.id}`,
+        time: cutoff,
+        run: async () => {
+          const report = await buildDailyReport(now.date);
+          const day = report.cabang.find((x) => x.id === c.id)!;
+          return sendWhatsApp(c.whatsappGroup, cutoffMessage(day, report.dateLabel, cutoff));
         },
       });
     }
@@ -64,7 +84,8 @@ export const GET = handle(async (req) => {
       results[job.key] = `menunggu ${job.time}`;
       continue;
     }
-    if (now.minutes > start + WHATSAPP.missedWindowMinutes) {
+    const end = job.until ? toMinutes(job.until) : start + WHATSAPP.missedWindowMinutes;
+    if (now.minutes >= end) {
       results[job.key] = "terlewat";
       continue;
     }

@@ -147,6 +147,8 @@ export const ABSEN = {
 //    Exactly these messages are sent, each once a day:
 //      a) Each cabang, at its openTime → its own whatsappGroup (set in CABANG above):
 //         reminder link + absen list of that cabang.
+//      a2) Each cabang, at openTime + toleranceMinutes (telat cutoff) → same group:
+//         "batas absen sudah lewat" + updated absen list.
 //      b) Rekap telat, at rekapTelat.time → rekapTelat.group (all cabang).
 //         On the last day of the month the monthly recap is added to this same message.
 //    Timing: an external scheduler (cron-job.org, see README) calls /api/cron/notify
@@ -156,10 +158,11 @@ export const ABSEN = {
 export const WHATSAPP = {
   appUrl: "https://bizkita-absensi.vercel.app/",
   sendOpeningMessage: true,
+  sendCutoffMessage: true,
   rekapTelat: {
     enabled: true,
     time: "12:00",
-    group: "", // e.g. "120363012345678901@g.us"
+    group: "120363421683129635@g.us", // e.g. "120363012345678901@g.us"
     includeMonthlyOnLastDay: true,
   },
   missedWindowMinutes: 120,

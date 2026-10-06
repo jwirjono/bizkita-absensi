@@ -176,9 +176,14 @@ export default function Admin() {
                   </button>
                 </div>
               ))}
-              <button className="ghost small" onClick={() => act({ action: "sendOpening", date, cabangId: c.id })}>
-                Kirim absensi {c.name} ke grupnya sekarang
-              </button>
+              <div className="row gap">
+                <button className="ghost small" onClick={() => act({ action: "sendOpening", date, cabangId: c.id })}>
+                  Kirim absensi {c.name} ke grupnya sekarang
+                </button>
+                <button className="ghost small" onClick={() => act({ action: "sendOpening", date, cabangId: c.id, cutoff: true })}>
+                  Kirim update batas telat {c.name}
+                </button>
+              </div>
             </div>
           );
         })}

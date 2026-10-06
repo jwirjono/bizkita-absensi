@@ -35,6 +35,17 @@ export function openingMessage(c: CabangDay, dateLabel: string, appUrl: string) 
   ].join("\n");
 }
 
+/** (a2) Sent to each cabang group at openTime + toleranceMinutes (the telat cutoff). */
+export function cutoffMessage(c: CabangDay, dateLabel: string, cutoff: string) {
+  return [
+    `⚠️ Batas absen ${c.name} jam ${cutoff} sudah lewat. Yang absen setelah ini dihitung telat.`,
+    "",
+    `*Absensi ${c.name} ${dateLabel} (update ${cutoff}):*`,
+    "",
+    ...absenLines(c),
+  ].join("\n");
+}
+
 /** (b) Sent to the rekap group at rekapTelat.time. */
 export function rekapTelatMessage(r: DailyReport) {
   const lines = [`*Rekap Telat ${r.dateLabel}:*`];

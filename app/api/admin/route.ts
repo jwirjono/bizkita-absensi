@@ -1,12 +1,12 @@
 import { CABANG, WHATSAPP } from "@/config/app.config";
-import { monthlyRecapMessage, openingMessage, rekapTelatMessage } from "@/config/messages";
+import { cutoffMessage, monthlyRecapMessage, openingMessage, rekapTelatMessage } from "@/config/messages";
 import { buildDailyReport, buildMonthlyRows, deleteAbsen, getDayRecords, getMonthRecords } from "@/lib/attendance";
 import { buildMonthWorkbook } from "@/lib/excel";
 import { enrolledIds, resetFace } from "@/lib/face";
 import { fail, handle, isAdmin, ok } from "@/lib/http";
 import { activeKaryawan, karyawanName, scheduleFor } from "@/lib/karyawan";
 import { KEYS, redis } from "@/lib/redis";
-import { isDate, isMonth, monthLabel, nowParts } from "@/lib/time";
+import { fromMinutes, isDate, isMonth, monthLabel, nowParts, toMinutes } from "@/lib/time";
 import { configuredTargets, listWhatsAppGroups, sendWhatsApp } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -73,7 +73,7 @@ export const GET = handle(async (req) => {
  * POST { action }
  *   resetFace   { id }          → delete face data so karyawan can onboard again
  *   deleteAbsen { date, id }    → remove a wrong absen record
- *   sendOpening { date, cabangId } → send that cabang's absen list to its group now
+ *   sendOpening { date, cabangId, cutoff? } → send that cabang's absen list (or cutoff update) to its group now
  *   sendDaily   { date }           → send rekap telat to the rekap group now
  *   sendMonthly { month }          → send monthly recap to the rekap group now
  */
@@ -96,7 +96,10 @@ export const POST = handle(async (req) => {
       if (!c) return fail("Cabang tidak ditemukan.");
       const report = await buildDailyReport(body.date);
       const day = report.cabang.find((x) => x.id === c.id)!;
-      const r = await sendWhatsApp(c.whatsappGroup, openingMessage(day, report.dateLabel, WHATSAPP.appUrl));
+      const text = body.cutoff
+        ? cutoffMessage(day, report.dateLabel, fromMinutes(toMinutes(c.openTime) + c.toleranceMinutes))
+        : openingMessage(day, report.dateLabel, WHATSAPP.appUrl);
+      const r = await sendWhatsApp(c.whatsappGroup, text);
       return r.ok ? ok({ message: `Absensi ${c.name} terkirim.` }) : fail(r.error ?? "Gagal kirim.", 502);
     }
     case "sendDaily": {

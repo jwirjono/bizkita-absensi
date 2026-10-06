@@ -4,6 +4,7 @@
  * Targets (group IDs) are set in config/app.config.ts.
  */
 import { CABANG, WHATSAPP } from "@/config/app.config";
+import { fromMinutes, toMinutes } from "./time";
 
 const API = "https://api.fonnte.com";
 
@@ -45,7 +46,10 @@ export async function listWhatsAppGroups(): Promise<{ ok: boolean; groups?: { id
 /** Configured destinations, for the admin page. */
 export function configuredTargets() {
   return [
-    ...CABANG.map((c) => ({ label: `Absensi ${c.name} (jam ${c.openTime})`, target: c.whatsappGroup })),
+    ...CABANG.map((c) => ({
+      label: `Absensi ${c.name} (jam ${c.openTime} dan ${fromMinutes(toMinutes(c.openTime) + c.toleranceMinutes)})`,
+      target: c.whatsappGroup,
+    })),
     { label: `Rekap telat (jam ${WHATSAPP.rekapTelat.time})`, target: WHATSAPP.rekapTelat.group },
   ];
 }
