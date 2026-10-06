@@ -80,7 +80,7 @@ export type Karyawan = {
 };
 
 export const KARYAWAN: Karyawan[] = [
-  { id: "andi", name: "Andi", cabang: "tubagus", active: true },
+  { id: "jevon", name: "Jevon", cabang: "tubagus", active: true },
   { id: "budi", name: "Budi", cabang: "tubagus", openTime: "11:00", active: true },
   { id: "sari", name: "Sari", cabang: "rancabolang", active: true },
   // { id: "rina", name: "Rina", cabang: "rancabolang", openTime: "13:00", toleranceMinutes: 10, active: true },
