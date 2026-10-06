@@ -43,8 +43,8 @@ export const CABANG: Cabang[] = [
   {
     id: "tubagus",
     name: "Tubagus",
-    lat: -6.8865, // TODO: replace with real coordinates
-    lng: 107.6153,
+    lat: -6.865756666417696, // TODO: replace with real coordinates
+    lng: 109.13411926216462,
     radiusMeters: 100,
     openTime: "10:00",
     toleranceMinutes: 15,
@@ -64,15 +64,26 @@ export const CABANG: Cabang[] = [
 // 3. KARYAWAN
 //    - id: short, unique, never change it once used (face data is stored under it).
 //    - name: shown in the dropdown and WhatsApp messages.
+//    - cabang: the cabang id (from CABANG above) this karyawan works at.
+//      They can ONLY absen at this cabang (GPS check).
+//    - openTime (optional): this karyawan's own jam masuk. Leave it out to use the cabang's openTime.
+//    - toleranceMinutes (optional): own tolerance. Leave it out to use the cabang's.
 //    - active: set false to hide someone without deleting their history.
 // ------------------------------------------------------------
-export type Karyawan = { id: string; name: string; active: boolean };
+export type Karyawan = {
+  id: string;
+  name: string;
+  cabang: string;
+  openTime?: string;
+  toleranceMinutes?: number;
+  active: boolean;
+};
 
 export const KARYAWAN: Karyawan[] = [
-  { id: "andi", name: "Andi", active: true },
-  { id: "budi", name: "Budi", active: true },
-  { id: "sari", name: "Sari", active: true },
-  // { id: "rina", name: "Rina", active: true },
+  { id: "andi", name: "Andi", cabang: "tubagus", active: true },
+  { id: "budi", name: "Budi", cabang: "tubagus", openTime: "11:00", active: true },
+  { id: "sari", name: "Sari", cabang: "rancabolang", active: true },
+  // { id: "rina", name: "Rina", cabang: "rancabolang", openTime: "13:00", toleranceMinutes: 10, active: true },
 ];
 
 // ------------------------------------------------------------
@@ -85,6 +96,21 @@ export const KARYAWAN: Karyawan[] = [
 export const FACE = {
   matchThreshold: 0.5,
   enrollSamples: 3,
+  /**
+   * Automatic photo: the camera takes the photo by itself when the face is clear and steady.
+   *   minScore: detector confidence 0–1 (higher = needs a clearer face).
+   *   minFaceWidth: face width as a fraction of the camera frame (higher = must be closer).
+   *   steadyFrames: how many good frames in a row before taking the photo.
+   *   sampleGapMs: pause between registration photos (so the 3 photos differ a little).
+   *   scanIntervalMs: how often the camera checks for a face.
+   */
+  auto: {
+    minScore: 0.6,
+    minFaceWidth: 0.22,
+    steadyFrames: 3,
+    sampleGapMs: 800,
+    scanIntervalMs: 200,
+  },
   /** face-api library + model files, loaded from CDN (no files in this repo). */
   libUrl: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js",
   modelUrl: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/",

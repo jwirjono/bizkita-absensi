@@ -41,20 +41,34 @@ export function loadFaceApi(): Promise<any> {
   return loading;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Tries a few frames; returns a 128-number face descriptor or null if no face found. */
-export async function detectDescriptor(video: HTMLVideoElement, tries = 5): Promise<number[] | null> {
+export type FaceCheck = { good: boolean; hint: string; descriptor: number[] | null };
+
+let detectorOptions: any = null;
+
+/**
+ * Checks ONE camera frame. `good` = face is clear, close enough and centered
+ * (thresholds in FACE.auto). `descriptor` = 128 numbers identifying the face.
+ */
+export async function checkFace(video: HTMLVideoElement): Promise<FaceCheck> {
+  if (video.readyState < 2 || !video.videoWidth) return { good: false, hint: "Menyalakan kamera…", descriptor: null };
   const faceapi = await loadFaceApi();
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
-  for (let i = 0; i < tries; i++) {
-    if (video.readyState >= 2) {
-      const r = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
-      if (r) return Array.from(r.descriptor as Float32Array).map((x) => Math.round(x * 10000) / 10000);
-    }
-    await sleep(300);
-  }
-  return null;
+  detectorOptions ??= new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 });
+  const r = await faceapi.detectSingleFace(video, detectorOptions).withFaceLandmarks().withFaceDescriptor();
+  if (!r) return { good: false, hint: "Hadapkan wajah ke kamera", descriptor: null };
+
+  const { box, score } = r.detection;
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  const cx = (box.x + box.width / 2) / w;
+  const cy = (box.y + box.height / 2) / h;
+  const descriptor = Array.from(r.descriptor as Float32Array).map((x) => Math.round(x * 10000) / 10000);
+
+  if (box.width / w < FACE.auto.minFaceWidth) return { good: false, hint: "Dekatkan wajah ke kamera", descriptor };
+  if (cx < 0.3 || cx > 0.7 || cy < 0.25 || cy > 0.75) return { good: false, hint: "Posisikan wajah di tengah lingkaran", descriptor };
+  if (score < FACE.auto.minScore) return { good: false, hint: "Cari cahaya yang lebih terang", descriptor };
+  return { good: true, hint: "Tahan sebentar…", descriptor };
 }
 
 /** Small JPEG of the current frame (stored once at enrollment so admin can check who registered). */

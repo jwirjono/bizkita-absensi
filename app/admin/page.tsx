@@ -3,15 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { APP } from "@/config/app.config";
 
-type Rec = { id: string; name: string; time: string; cabangName: string; late: boolean; lateMinutes: number; distanceMeters: number; faceDistance: number };
+type Rec = { id: string; name: string; time: string; openTime: string; cabangId: string; late: boolean; lateMinutes: number; distanceMeters: number; faceDistance: number };
 type Row = { id: string; name: string; present: number; lateCount: number; lateMinutes: number };
 type Overview = {
   today: string;
   cabang: { id: string; name: string; openTime: string; toleranceMinutes: number; radiusMeters: number }[];
-  karyawan: { id: string; name: string; enrolled: boolean }[];
+  karyawan: { id: string; name: string; cabangName: string; openTime: string; toleranceMinutes: number; enrolled: boolean }[];
 };
 
 const PIN_KEY = "absensi:adminPin";
+
+const notYetByCabang = (report: { cabang: { id: string; notYet: string[] }[] }) =>
+  Object.fromEntries(report.cabang.map((c) => [c.id, c.notYet]));
 
 export default function Admin() {
   const [pin, setPin] = useState("");
@@ -20,7 +23,7 @@ export default function Admin() {
   const [date, setDate] = useState("");
   const [month, setMonth] = useState("");
   const [records, setRecords] = useState<Rec[]>([]);
-  const [notYet, setNotYet] = useState<string[]>([]);
+  const [notYet, setNotYet] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Row[]>([]);
   const [photos, setPhotos] = useState<Record<string, string | null>>({});
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
@@ -71,7 +74,7 @@ export default function Admin() {
     api(`?action=day&date=${date}`).then((r) => {
       if (r.ok) {
         setRecords(r.records);
-        setNotYet(r.report.notYet);
+        setNotYet(notYetByCabang(r.report));
       }
     });
   }, [authed, date, api]);
@@ -89,7 +92,7 @@ export default function Admin() {
     if (r.ok) {
       const [o, d, m] = await Promise.all([api("?action=overview"), api(`?action=day&date=${date}`), api(`?action=month&month=${month}`)]);
       if (o.ok) setOverview(o);
-      if (d.ok) (setRecords(d.records), setNotYet(d.report.notYet));
+      if (d.ok) (setRecords(d.records), setNotYet(notYetByCabang(d.report)));
       if (m.ok) setRows(m.rows);
     }
   }
@@ -143,17 +146,20 @@ export default function Admin() {
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         {overview?.cabang.map((c) => {
-          const list = records.filter((r) => r.cabangName === c.name);
+          const list = records.filter((r) => r.cabangId === c.id);
           return (
             <div key={c.id} className="group">
               <p className="group-title">
                 {c.name} <span className="muted">· buka {c.openTime}, toleransi {c.toleranceMinutes} menit</span>
               </p>
               {list.length === 0 && <p className="muted">Belum ada yang absen.</p>}
+              {(notYet[c.id] ?? []).length > 0 && <p className="muted">Belum absen: {notYet[c.id].join(", ")}</p>}
               {list.map((r) => (
                 <div key={r.id} className="line">
                   <span>{r.name}</span>
-                  <span>{r.time}</span>
+                  <span>
+                    {r.time} <span className="muted small-text">/ {r.openTime}</span>
+                  </span>
                   <span className={r.late ? "tag late" : "tag ok"}>{r.late ? `telat ${r.lateMinutes}m` : "tepat"}</span>
                   <span className="muted small-text">{r.distanceMeters} m</span>
                   <button className="ghost small" onClick={() => act({ action: "deleteAbsen", date, id: r.id }, `Hapus absen ${r.name} tanggal ${date}?`)}>
@@ -164,7 +170,6 @@ export default function Admin() {
             </div>
           );
         })}
-        {notYet.length > 0 && <p className="muted">Belum absen: {notYet.join(", ")}</p>}
         <button onClick={() => act({ action: "sendDaily", date })}>Kirim ringkasan ke WhatsApp</button>
       </section>
 
@@ -197,11 +202,14 @@ export default function Admin() {
 
       <section className="card">
         <h2>Karyawan dan data wajah</h2>
-        <p className="muted">Tambah atau hapus karyawan di config/app.config.ts.</p>
+        <p className="muted">Tambah, hapus, atau ubah cabang dan jam masuk karyawan di config/app.config.ts.</p>
         {overview?.karyawan.map((k) => (
           <div key={k.id}>
             <div className="line">
               <span>{k.name}</span>
+              <span className="muted small-text">
+                {k.cabangName} · {k.openTime} (+{k.toleranceMinutes}m)
+              </span>
               <span className={k.enrolled ? "tag ok" : "tag"}>{k.enrolled ? "wajah terdaftar" : "belum daftar"}</span>
               {k.enrolled && (
                 <>

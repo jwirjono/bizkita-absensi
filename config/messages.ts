@@ -13,9 +13,10 @@ export const TERMS_OF_USE = `Dengan menggunakan aplikasi absensi ini, saya menye
 5. Data absen disimpan maksimal 2 bulan, lalu dihapus otomatis.
 6. Saya tidak akan mengabsenkan orang lain atau memalsukan absen.`;
 
-export function lateAlertMessage(p: { name: string; cabang: string; time: string; lateMinutes: number }) {
+export function lateAlertMessage(p: { name: string; cabang: string; openTime: string; time: string; lateMinutes: number }) {
   return `⚠️ *TELAT* — ${p.name}
 Cabang: ${p.cabang}
+Jam masuk: ${p.openTime}
 Jam absen: ${p.time}
 Telat: ${p.lateMinutes} menit`;
 }
@@ -29,12 +30,14 @@ export function dailySummaryMessage(r: DailyReport) {
   const lines: string[] = [`*ABSENSI ${r.dateLabel}*`];
   for (const c of r.cabang) {
     lines.push("", `*${c.name}* (buka ${c.openTime})`);
-    if (c.rows.length === 0) lines.push("- belum ada yang absen");
     for (const row of c.rows) {
-      lines.push(row.late ? `❌ ${row.name} ${row.time} (telat ${row.lateMinutes}m)` : `✅ ${row.name} ${row.time}`);
+      const shift = row.openTime !== c.openTime ? ` [masuk ${row.openTime}]` : "";
+      lines.push(
+        row.late ? `❌ ${row.name} ${row.time} (telat ${row.lateMinutes}m)${shift}` : `✅ ${row.name} ${row.time}${shift}`,
+      );
     }
+    if (c.notYet.length) lines.push(`➖ Belum absen: ${c.notYet.join(", ")}`);
   }
-  if (r.notYet.length) lines.push("", `Belum absen: ${r.notYet.join(", ")}`);
   lines.push("", r.lateNames.length ? `Telat hari ini: ${r.lateNames.join(", ")}` : "Tidak ada yang telat hari ini 👍");
   return lines.join("\n");
 }

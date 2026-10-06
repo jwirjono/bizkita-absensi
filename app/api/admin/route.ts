@@ -3,7 +3,7 @@ import { dailySummaryMessage, monthlyRecapMessage } from "@/config/messages";
 import { buildDailyReport, buildMonthlyRows, deleteAbsen, getDayRecords, getMonthRecords, toCsv } from "@/lib/attendance";
 import { enrolledIds, resetFace } from "@/lib/face";
 import { fail, handle, isAdmin, ok } from "@/lib/http";
-import { activeKaryawan, karyawanName } from "@/lib/karyawan";
+import { activeKaryawan, karyawanName, scheduleFor } from "@/lib/karyawan";
 import { KEYS, redis } from "@/lib/redis";
 import { isDate, isMonth, monthLabel, nowParts } from "@/lib/time";
 import { sendWhatsApp } from "@/lib/whatsapp";
@@ -28,7 +28,10 @@ export const GET = handle(async (req) => {
     return ok({
       today: nowParts().date,
       cabang: CABANG.map(({ id, name, openTime, toleranceMinutes, radiusMeters }) => ({ id, name, openTime, toleranceMinutes, radiusMeters })),
-      karyawan: activeKaryawan().map((k) => ({ ...k, enrolled: enrolled.has(k.id) })),
+      karyawan: activeKaryawan().map((k) => {
+        const s = scheduleFor(k);
+        return { id: k.id, name: k.name, cabangName: s.cabang.name, openTime: s.openTime, toleranceMinutes: s.toleranceMinutes, enrolled: enrolled.has(k.id) };
+      }),
     });
   }
   if (action === "day") {

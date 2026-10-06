@@ -3,9 +3,9 @@ import { GPS, WHATSAPP } from "@/config/app.config";
 import { lateAlertMessage } from "@/config/messages";
 import { evaluateLate, saveAbsen, type AbsenRecord } from "@/lib/attendance";
 import { bestDistance, getFace, isDescriptor, isMatch } from "@/lib/face";
-import { nearestCabang } from "@/lib/geo";
+import { distanceMeters } from "@/lib/geo";
 import { fail, handle, ok } from "@/lib/http";
-import { findKaryawan } from "@/lib/karyawan";
+import { findKaryawan, scheduleFor } from "@/lib/karyawan";
 import { nowParts } from "@/lib/time";
 import { sendWhatsApp } from "@/lib/whatsapp";
 
@@ -23,9 +23,10 @@ export const POST = handle(async (req) => {
   if (accuracy > GPS.maxAccuracyMeters) {
     return fail(`Sinyal GPS kurang akurat (±${Math.round(accuracy)} m). Coba di dekat pintu/luar ruangan lalu ulangi.`);
   }
-  const { cabang, distance } = nearestCabang(lat, lng);
+  const { cabang, openTime, toleranceMinutes } = scheduleFor(k);
+  const distance = distanceMeters(lat, lng, cabang.lat, cabang.lng);
   if (distance > cabang.radiusMeters) {
-    return fail(`Kamu berada ${Math.round(distance)} m dari cabang terdekat (${cabang.name}). Absen hanya bisa di cabang.`);
+    return fail(`Kamu berada ${Math.round(distance)} m dari cabang ${cabang.name}. ${k.name} hanya bisa absen di cabang ${cabang.name}.`);
   }
 
   // 2. Face
@@ -39,7 +40,7 @@ export const POST = handle(async (req) => {
 
   // 3. Save
   const now = nowParts();
-  const { late, lateMinutes } = evaluateLate(cabang, now.minutes);
+  const { late, lateMinutes } = evaluateLate(openTime, toleranceMinutes, now.minutes);
   const record: AbsenRecord = {
     id: k.id,
     name: k.name,
@@ -47,6 +48,7 @@ export const POST = handle(async (req) => {
     time: now.time,
     cabangId: cabang.id,
     cabangName: cabang.name,
+    openTime,
     late,
     lateMinutes,
     distanceMeters: Math.round(distance),
@@ -57,7 +59,7 @@ export const POST = handle(async (req) => {
 
   // 4. Notify
   if (late && WHATSAPP.sendLateAlert) {
-    after(() => sendWhatsApp(lateAlertMessage({ name: k.name, cabang: cabang.name, time: now.time, lateMinutes })));
+    after(() => sendWhatsApp(lateAlertMessage({ name: k.name, cabang: cabang.name, openTime, time: now.time, lateMinutes })));
   }
   return ok({ record });
 });

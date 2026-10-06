@@ -1,4 +1,4 @@
-import { CABANG, RETENTION, type Cabang } from "@/config/app.config";
+import { CABANG, RETENTION } from "@/config/app.config";
 import { activeKaryawan } from "./karyawan";
 import { KEYS, redis } from "./redis";
 import { dateLabel, shiftMonth, toMinutes } from "./time";
@@ -10,6 +10,7 @@ export type AbsenRecord = {
   time: string; // HH:mm
   cabangId: string;
   cabangName: string;
+  openTime: string; // jam masuk used for this record
   late: boolean;
   lateMinutes: number;
   distanceMeters: number;
@@ -20,17 +21,16 @@ export type AbsenRecord = {
 export type DailyReport = {
   date: string;
   dateLabel: string;
-  cabang: { id: string; name: string; openTime: string; rows: AbsenRecord[] }[];
-  notYet: string[];
+  cabang: { id: string; name: string; openTime: string; rows: AbsenRecord[]; notYet: string[] }[];
   lateNames: string[];
 };
 
 export type MonthlyRow = { id: string; name: string; present: number; lateCount: number; lateMinutes: number };
 
 /** Telat if absen after openTime + tolerance. Minutes counted from openTime. */
-export function evaluateLate(cabang: Cabang, minutesNow: number) {
-  const open = toMinutes(cabang.openTime);
-  const late = minutesNow > open + cabang.toleranceMinutes;
+export function evaluateLate(openTime: string, toleranceMinutes: number, minutesNow: number) {
+  const open = toMinutes(openTime);
+  const late = minutesNow > open + toleranceMinutes;
   return { late, lateMinutes: late ? minutesNow - open : 0 };
 }
 
@@ -64,8 +64,10 @@ export async function buildDailyReport(date: string): Promise<DailyReport> {
       name: c.name,
       openTime: c.openTime,
       rows: records.filter((r) => r.cabangId === c.id),
+      notYet: activeKaryawan()
+        .filter((k) => k.cabang === c.id && !done.has(k.id))
+        .map((k) => k.name),
     })),
-    notYet: activeKaryawan().filter((k) => !done.has(k.id)).map((k) => k.name),
     lateNames: records.filter((r) => r.late).map((r) => r.name),
   };
 }
