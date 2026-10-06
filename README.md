@@ -3,7 +3,7 @@
 Simple attendance app: pick name → selfie (face match) + GPS → on time / telat → WhatsApp to the owner.
 
 - `/` — karyawan absen page (first time: terms of use + face registration)
-- `/admin` — daily list, monthly recap, CSV export, reset face (protected by `ADMIN_PIN`)
+- `/admin` — daily list, monthly recap, Excel export, reset face (protected by `ADMIN_PIN`)
 
 ## Where to change things
 
@@ -38,14 +38,20 @@ Set `active: false` (keeps their history in reports). Then reset their face in `
 1. **Push to GitHub** and import the repo in Vercel (Add New → Project).
 2. **Database:** Vercel project → Storage → Create Database → **Upstash Redis** (free) → connect to the project.
    `KV_REST_API_URL` and `KV_REST_API_TOKEN` are added automatically.
-3. **WhatsApp (CallMeBot):** EACH person who should receive messages follows the steps at
-   https://www.callmebot.com/blog/free-api-whatsapp-messages/ to get an API key for their number.
-4. **Environment variables** (Vercel → Settings → Environment Variables):
+3. **WhatsApp (Fonnte):** sign up at https://fonnte.com → Device → add device with the sender number
+   (use a spare number) → scan the QR code from WhatsApp → copy the device **Token**.
+   The sender number must be a member of any group you want to post to.
+4. **Environment variables** (Vercel → Settings → Environment Variables, tick Production):
    - `ADMIN_PIN` — your admin PIN
-   - `CALLMEBOT_RECIPIENTS` — `phone:apikey` pairs, comma-separated, e.g. `081234567890:111111,081298765432:222222`
+   - `FONNTE_TOKEN` — from step 3
+   - `WHATSAPP_TARGETS` — numbers and/or group IDs, comma-separated, e.g. `081514174883,120363012345678901@g.us`
    - `CRON_SECRET` — any long random string
 5. **Real coordinates:** replace the `lat`/`lng` placeholders in `CABANG`.
-6. Redeploy, then open `/admin` and press "Kirim ringkasan ke WhatsApp" to test the WhatsApp setup.
+6. Redeploy, then open `/admin`:
+   - WhatsApp → "Tampilkan tujuan dan grup WhatsApp" lists your groups with their IDs (copy into `WHATSAPP_TARGETS`, redeploy).
+   - Press "Kirim ringkasan ke WhatsApp" to test.
+
+Fonnte free plan: 1,000 messages/month (each target counts), with a small Fonnte watermark. Lite (Rp 25k) removes it.
 
 ## How it works
 

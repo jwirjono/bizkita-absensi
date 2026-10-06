@@ -24,7 +24,7 @@ export const APP = {
 // ------------------------------------------------------------
 // 2. CABANG
 //    - lat/lng: Google Maps → long-press the shop → copy the numbers.
-//    - radiusMeters: how far from the shop karyawan may absen.
+//    - radiusMeters: how far from the shop karyawan may absen (1000 = 1 km).
 //    - openTime: jam buka (HH:mm, 24h).
 //    - toleranceMinutes: absen after openTime + tolerance = TELAT.
 //      "Telat X menit" is counted from openTime.
@@ -45,7 +45,7 @@ export const CABANG: Cabang[] = [
     name: "Tubagus",
     lat: -6.865756666417696, // TODO: replace with real coordinates
     lng: 109.13411926216462,
-    radiusMeters: 100,
+    radiusMeters: 100, // 1 km
     openTime: "10:00",
     toleranceMinutes: 15,
   },
@@ -54,7 +54,7 @@ export const CABANG: Cabang[] = [
     name: "Rancabolang",
     lat: -6.9455, // TODO: replace with real coordinates
     lng: 107.6633,
-    radiusMeters: 100,
+    radiusMeters: 100, // 1 km
     openTime: "09:00",
     toleranceMinutes: 15,
   },
@@ -126,7 +126,8 @@ export const GPS = {
 };
 
 // ------------------------------------------------------------
-// 6. WHATSAPP (via CallMeBot, sent to ONE number = the owner)
+// 6. WHATSAPP (via Fonnte)
+//    WHO receives messages (numbers / group IDs) is set in Vercel env WHATSAPP_TARGETS.
 //    Turn individual notifications on/off here.
 //    The daily summary TIME is set in vercel.json ("crons" → "schedule", in UTC).
 //      12:00 WIB = "0 5 * * *"   (WIB = UTC+7)

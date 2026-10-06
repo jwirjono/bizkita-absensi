@@ -1,66 +1,61 @@
 /**
- * Sends WhatsApp messages via CallMeBot (free).
- * Each recipient registers their OWN number with CallMeBot and gets their own API key:
- *   https://www.callmebot.com/blog/free-api-whatsapp-messages/
+ * Sends WhatsApp messages via Fonnte (https://fonnte.com), using your own WhatsApp number as sender.
  *
- * Env: CALLMEBOT_RECIPIENTS = "phone:apikey,phone:apikey"
- *   e.g. "081234567890:111111,6281298765432:222222"  (0... or 62... both fine)
- * (Old single-recipient form CALLMEBOT_PHONE + CALLMEBOT_APIKEY still works.)
+ * Env:
+ *   FONNTE_TOKEN      — Fonnte dashboard → Device → Token
+ *   WHATSAPP_TARGETS  — comma-separated numbers and/or group IDs, e.g.
+ *                       "081514174883,120363012345678901@g.us"
+ *                       (find group IDs on /admin → "Tampilkan grup WhatsApp")
  */
 
-type Recipient = { phone: string; apikey: string };
+const API = "https://api.fonnte.com";
 
-/** "0812-3456-789" → "628123456789" */
-function normalizePhone(raw: string) {
-  const digits = raw.replace(/\D/g, "");
-  return digits.startsWith("0") ? "62" + digits.slice(1) : digits;
-}
-
-function recipients(): Recipient[] {
-  const list = (process.env.CALLMEBOT_RECIPIENTS ?? "")
-    .split(",")
-    .map((s) => s.trim())
+/** "0815-1417-4883" → "081514174883"; group IDs (…@g.us) are kept as-is. */
+function targets() {
+  return (process.env.WHATSAPP_TARGETS ?? "")
+    .replace(/["'`]/g, "")
+    .split(/[,;\n]+/)
+    .map((t) => t.trim())
     .filter(Boolean)
-    .map((entry) => {
-      const i = entry.lastIndexOf(":");
-      return { phone: normalizePhone(entry.slice(0, i)), apikey: entry.slice(i + 1).trim() };
-    })
-    .filter((r) => r.phone && r.apikey);
-  if (process.env.CALLMEBOT_PHONE && process.env.CALLMEBOT_APIKEY) {
-    list.push({ phone: normalizePhone(process.env.CALLMEBOT_PHONE), apikey: process.env.CALLMEBOT_APIKEY });
-  }
-  return list;
+    .map((t) => (t.includes("@") ? t : t.replace(/[^\d+]/g, "")))
+    .filter(Boolean);
 }
 
-async function sendOne(r: Recipient, text: string) {
-  const url =
-    "https://api.callmebot.com/whatsapp.php" +
-    `?phone=${encodeURIComponent(r.phone)}&text=${encodeURIComponent(text)}&apikey=${encodeURIComponent(r.apikey)}`;
+async function fonnte(path: string, body?: Record<string, string>) {
+  const token = process.env.FONNTE_TOKEN;
+  if (!token) return { status: false, reason: "FONNTE_TOKEN belum diset" };
   try {
-    const res = await fetch(url, { cache: "no-store" });
-    const body = await res.text();
-    if (!res.ok || /error|invalid/i.test(body.slice(0, 500))) {
-      console.error(`[whatsapp] ${r.phone} failed`, res.status, body.slice(0, 300));
-      return false;
-    }
-    return true;
+    const res = await fetch(API + path, {
+      method: "POST",
+      headers: { Authorization: token },
+      body: body ? new URLSearchParams(body) : undefined,
+      cache: "no-store",
+    });
+    return await res.json();
   } catch (e) {
-    console.error(`[whatsapp] ${r.phone} error`, e);
-    return false;
+    console.error("[whatsapp] fonnte error", e);
+    return { status: false, reason: "tidak bisa menghubungi Fonnte" };
   }
 }
 
-/** Sends to every recipient (one after another — CallMeBot dislikes parallel calls). */
 export async function sendWhatsApp(text: string): Promise<{ ok: boolean; error?: string }> {
-  const list = recipients();
-  if (!list.length) {
+  const list = targets();
+  if (!process.env.FONNTE_TOKEN || !list.length) {
     console.log("[whatsapp] not configured, message not sent:\n" + text);
-    return { ok: false, error: "WhatsApp belum dikonfigurasi (CALLMEBOT_RECIPIENTS)." };
+    return { ok: false, error: "WhatsApp belum dikonfigurasi (FONNTE_TOKEN / WHATSAPP_TARGETS)." };
   }
-  const failed: string[] = [];
-  for (const r of list) {
-    if (!(await sendOne(r, text))) failed.push(r.phone);
-  }
-  if (failed.length) return { ok: false, error: `Gagal kirim ke: ${failed.join(", ")}. Cek nomor dan API key CallMeBot.` };
-  return { ok: true };
+  const r = await fonnte("/send", { target: list.join(","), message: text, countryCode: "62", delay: "2" });
+  if (r.status) return { ok: true };
+  console.error("[whatsapp] send failed", r);
+  return { ok: false, error: `Fonnte gagal: ${r.reason ?? r.detail ?? "unknown"}` };
 }
+
+/** Lists the WhatsApp groups the connected number is in (to find group IDs). */
+export async function listWhatsAppGroups(): Promise<{ ok: boolean; groups?: { id: string; name: string }[]; error?: string }> {
+  await fonnte("/fetch-group"); // refresh Fonnte's copy of the group list
+  const r = await fonnte("/get-whatsapp-group");
+  if (r.status && Array.isArray(r.data)) return { ok: true, groups: r.data };
+  return { ok: false, error: `Fonnte: ${r.reason ?? r.detail ?? "grup tidak ditemukan"}` };
+}
+
+export const whatsAppTargets = targets;

@@ -95,13 +95,3 @@ export async function cleanupOldMonths(currentMonth: string) {
   );
   return redis().del(...keys);
 }
-
-export function toCsv(records: AbsenRecord[]) {
-  const header = ["tanggal", "jam", "nama", "cabang", "status", "telat_menit", "jarak_meter", "skor_wajah"];
-  const lines = records.map((r) =>
-    [r.date, r.time, r.name, r.cabangName, r.late ? "TELAT" : "TEPAT", r.lateMinutes, r.distanceMeters, r.faceDistance]
-      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-      .join(","),
-  );
-  return [header.join(","), ...lines].join("\n");
-}

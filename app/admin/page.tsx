@@ -27,6 +27,7 @@ export default function Admin() {
   const [rows, setRows] = useState<Row[]>([]);
   const [photos, setPhotos] = useState<Record<string, string | null>>({});
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  const [wa, setWa] = useState<{ targets: string[]; groups: { id: string; name: string }[]; groupError: string | null } | null>(null);
 
   const api = useCallback(
     async (query: string, body?: object, pinOverride?: string) => {
@@ -97,13 +98,21 @@ export default function Admin() {
     }
   }
 
-  async function exportCsv() {
-    const res = await fetch(`/api/admin?action=csv&month=${month}`, { headers: { "x-admin-pin": pin } });
+  async function exportExcel() {
+    const res = await fetch(`/api/admin?action=excel&month=${month}`, { headers: { "x-admin-pin": pin } });
     if (!res.ok) return setNotice({ text: "Gagal export.", error: true });
     const url = URL.createObjectURL(await res.blob());
-    const a = Object.assign(document.createElement("a"), { href: url, download: `absensi-${month}.csv` });
+    const a = Object.assign(document.createElement("a"), { href: url, download: `absensi-${month}.xlsx` });
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function loadWa() {
+    setNotice({ text: "Mengambil data WhatsApp…" });
+    const r = await api("?action=whatsapp");
+    if (!r.ok) return setNotice({ text: r.error, error: true });
+    setWa(r);
+    setNotice(null);
   }
 
   async function togglePhoto(id: string) {
@@ -196,7 +205,7 @@ export default function Admin() {
           ))}
         <div className="row gap">
           <button onClick={() => act({ action: "sendMonthly", month })}>Kirim rekap ke WhatsApp</button>
-          <button onClick={exportCsv}>Export CSV</button>
+          <button onClick={exportExcel}>Download Excel</button>
         </div>
       </section>
 
@@ -234,6 +243,39 @@ export default function Admin() {
               ))}
           </div>
         ))}
+      </section>
+
+      <section className="card">
+        <h2>WhatsApp</h2>
+        <p className="muted">
+          Tujuan pesan diatur di Vercel: <code>WHATSAPP_TARGETS</code> (nomor dan/atau ID grup, pisahkan dengan koma).
+        </p>
+        <button onClick={loadWa}>Tampilkan tujuan dan grup WhatsApp</button>
+        {wa && (
+          <>
+            <p className="group-title">Tujuan sekarang</p>
+            {wa.targets.length ? (
+              wa.targets.map((t) => (
+                <p key={t} className="muted">
+                  {t}
+                </p>
+              ))
+            ) : (
+              <p className="muted">Belum ada. Isi WHATSAPP_TARGETS di Vercel.</p>
+            )}
+            <p className="group-title">Grup yang diikuti nomor Fonnte</p>
+            {wa.groupError && <p className="muted">{wa.groupError}</p>}
+            {wa.groups.map((g) => (
+              <div key={g.id} className="line wa-line">
+                <span>{g.name}</span>
+                <code>{g.id}</code>
+                <button className="ghost small" onClick={() => navigator.clipboard?.writeText(g.id).then(() => setNotice({ text: `ID grup ${g.name} disalin.` }))}>
+                  Salin ID
+                </button>
+              </div>
+            ))}
+          </>
+        )}
       </section>
     </main>
   );

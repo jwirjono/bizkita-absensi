@@ -1,12 +1,13 @@
 import { CABANG } from "@/config/app.config";
 import { dailySummaryMessage, monthlyRecapMessage } from "@/config/messages";
-import { buildDailyReport, buildMonthlyRows, deleteAbsen, getDayRecords, getMonthRecords, toCsv } from "@/lib/attendance";
+import { buildDailyReport, buildMonthlyRows, deleteAbsen, getDayRecords, getMonthRecords } from "@/lib/attendance";
+import { buildMonthWorkbook } from "@/lib/excel";
 import { enrolledIds, resetFace } from "@/lib/face";
 import { fail, handle, isAdmin, ok } from "@/lib/http";
 import { activeKaryawan, karyawanName, scheduleFor } from "@/lib/karyawan";
 import { KEYS, redis } from "@/lib/redis";
 import { isDate, isMonth, monthLabel, nowParts } from "@/lib/time";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { listWhatsAppGroups, sendWhatsApp, whatsAppTargets } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,9 @@ export const dynamic = "force-dynamic";
  *   overview              → today, karyawan + face status, cabang config
  *   day&date=YYYY-MM-DD   → records for a day
  *   month&month=YYYY-MM   → recap rows for a month
- *   csv&month=YYYY-MM     → CSV download
+ *   excel&month=YYYY-MM   → Excel (.xlsx) download: Rekap, Kalender, Detail
  *   photo&id=             → enrollment photo
+ *   whatsapp              → current WhatsApp targets + the sender's WhatsApp groups (with IDs)
  */
 export const GET = handle(async (req) => {
   if (!isAdmin(req)) return fail("PIN admin salah.", 401);
@@ -44,15 +46,21 @@ export const GET = handle(async (req) => {
     if (!isMonth(month)) return fail("Bulan tidak valid.");
     return ok({ rows: await buildMonthlyRows(month), label: monthLabel(month) });
   }
-  if (action === "csv") {
+  if (action === "excel") {
     const month = q.get("month");
     if (!isMonth(month)) return fail("Bulan tidak valid.");
-    return new Response("﻿" + toCsv(await getMonthRecords(month)), {
+    const [rows, records] = await Promise.all([buildMonthlyRows(month), getMonthRecords(month)]);
+    const file = await buildMonthWorkbook(month, rows, records);
+    return new Response(file, {
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="absensi-${month}.csv"`,
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="absensi-${month}.xlsx"`,
       },
     });
+  }
+  if (action === "whatsapp") {
+    const g = await listWhatsAppGroups();
+    return ok({ targets: whatsAppTargets(), groups: g.groups ?? [], groupError: g.error ?? null });
   }
   if (action === "photo") {
     const id = q.get("id") ?? "";
