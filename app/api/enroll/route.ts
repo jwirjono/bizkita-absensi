@@ -10,7 +10,7 @@ import { sendWhatsApp } from "@/lib/whatsapp";
 /** One-time onboarding: consent + face samples. Cannot overwrite existing face data (admin must reset). */
 export const POST = handle(async (req) => {
   const body = await req.json().catch(() => ({}));
-  const k = findKaryawan(body.id);
+  const k = await findKaryawan(body.id);
   if (!k) return fail("Karyawan tidak ditemukan.");
   if (body.consent !== true) return fail("Syarat penggunaan harus disetujui.");
 

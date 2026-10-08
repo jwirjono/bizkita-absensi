@@ -4,7 +4,7 @@ import { buildDailyReport, buildMonthlyRows, deleteAbsen, getDayRecords, getMont
 import { buildMonthWorkbook } from "@/lib/excel";
 import { enrolledIds, resetFace } from "@/lib/face";
 import { fail, handle, isAdmin, ok } from "@/lib/http";
-import { activeKaryawan, karyawanName, scheduleFor } from "@/lib/karyawan";
+import { allKaryawan, createKaryawan, deleteKaryawan, karyawanName, scheduleFor, updateKaryawan, validateKaryawan } from "@/lib/karyawan";
 import { KEYS, redis } from "@/lib/redis";
 import { fromMinutes, isDate, isMonth, monthLabel, nowParts, toMinutes } from "@/lib/time";
 import { configuredTargets, listWhatsAppGroups, sendWhatsApp } from "@/lib/whatsapp";
@@ -13,10 +13,10 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET ?action=
- *   overview              → today, karyawan + face status, cabang config
+ *   overview              → today, all karyawan (incl. inactive) + face status, cabang config
  *   day&date=YYYY-MM-DD   → records for a day
  *   month&month=YYYY-MM   → recap rows for a month
- *   excel&month=YYYY-MM   → Excel (.xlsx) download: Rekap, Kalender, Detail
+ *   excel&month=YYYY-MM   → Excel (.xlsx) download: Daftar Absen, Rekap
  *   photo&id=             → enrollment photo
  *   whatsapp              → current WhatsApp targets + the sender's WhatsApp groups (with IDs)
  */
@@ -30,9 +30,15 @@ export const GET = handle(async (req) => {
     return ok({
       today: nowParts().date,
       cabang: CABANG.map(({ id, name, openTime, toleranceMinutes, radiusMeters }) => ({ id, name, openTime, toleranceMinutes, radiusMeters })),
-      karyawan: activeKaryawan().map((k) => {
+      karyawan: (await allKaryawan()).map((k) => {
         const s = scheduleFor(k);
-        return { id: k.id, name: k.name, cabangName: s.cabang.name, openTime: s.openTime, toleranceMinutes: s.toleranceMinutes, enrolled: enrolled.has(k.id) };
+        return {
+          ...k, // raw values for the edit form (own openTime / toleranceMinutes may be empty)
+          cabangName: s.cabang.name,
+          effectiveOpenTime: s.openTime,
+          effectiveTolerance: s.toleranceMinutes,
+          enrolled: enrolled.has(k.id),
+        };
       }),
     });
   }
@@ -49,8 +55,8 @@ export const GET = handle(async (req) => {
   if (action === "excel") {
     const month = q.get("month");
     if (!isMonth(month)) return fail("Bulan tidak valid.");
-    const [rows, records] = await Promise.all([buildMonthlyRows(month), getMonthRecords(month)]);
-    const file = await buildMonthWorkbook(month, rows, records);
+    const [rows, records, karyawan] = await Promise.all([buildMonthlyRows(month), getMonthRecords(month), allKaryawan()]);
+    const file = await buildMonthWorkbook(month, rows, records, karyawan);
     return new Response(file, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -71,6 +77,8 @@ export const GET = handle(async (req) => {
 
 /**
  * POST { action }
+ *   saveKaryawan   { id?, name, cabang, openTime?, toleranceMinutes?, active } → create (no id) or update
+ *   deleteKaryawan { id }       → remove karyawan + face data (absen history is kept)
  *   resetFace   { id }          → delete face data so karyawan can onboard again
  *   deleteAbsen { date, id }    → remove a wrong absen record
  *   sendOpening { date, cabangId, cutoff? } → send that cabang's absen list (or cutoff update) to its group now
@@ -82,10 +90,27 @@ export const POST = handle(async (req) => {
   const body = await req.json().catch(() => ({}));
 
   switch (body.action) {
+    case "saveKaryawan": {
+      const v = validateKaryawan(body);
+      if (!v.ok) return fail(v.error);
+      if (typeof body.id === "string" && body.id) {
+        const k = await updateKaryawan(body.id, v.value);
+        return k ? ok({ message: `${k.name} disimpan.` }) : fail("Karyawan tidak ditemukan.", 404);
+      }
+      const k = await createKaryawan(v.value);
+      return ok({ message: `${k.name} ditambahkan. Dia bisa daftar wajah di halaman absen.` });
+    }
+    case "deleteKaryawan": {
+      if (typeof body.id !== "string") return fail("id wajib diisi.");
+      const name = await karyawanName(body.id);
+      await resetFace(body.id);
+      await deleteKaryawan(body.id);
+      return ok({ message: `${name} dihapus. Riwayat absen tetap tersimpan.` });
+    }
     case "resetFace":
       if (typeof body.id !== "string") return fail("id wajib diisi.");
       await resetFace(body.id);
-      return ok({ message: `Wajah ${karyawanName(body.id)} direset.` });
+      return ok({ message: `Wajah ${await karyawanName(body.id)} direset.` });
     case "deleteAbsen":
       if (!isDate(body.date) || typeof body.id !== "string") return fail("Data tidak valid.");
       await deleteAbsen(body.date, body.id);

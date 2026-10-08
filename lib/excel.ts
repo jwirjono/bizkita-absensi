@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
-import { APP, KARYAWAN } from "@/config/app.config";
+import { APP } from "@/config/app.config";
 import type { AbsenRecord, MonthlyRow } from "./attendance";
-import { scheduleFor } from "./karyawan";
+import { scheduleFor, type Karyawan } from "./karyawan";
 import { monthLabel } from "./time";
 
 const RED_FILL = "FFF8D7D7";
@@ -34,8 +34,8 @@ function addTitle(ws: ExcelJS.Worksheet, title: string, cols: number) {
   ws.addRow([]);
 }
 
-const info = (id: string) => {
-  const k = KARYAWAN.find((x) => x.id === id);
+const infoFrom = (list: Karyawan[]) => (id: string) => {
+  const k = list.find((x) => x.id === id);
   if (!k) return { cabang: "-", openTime: "-" };
   const s = scheduleFor(k);
   return { cabang: s.cabang.name, openTime: s.openTime };
@@ -51,7 +51,8 @@ const toDate = (ymd: string) => {
  *   Tab 1 "Daftar Absen": every absen, per day; rows striped red when telat.
  *   Tab 2 "Rekap":        totals per karyawan.
  */
-export async function buildMonthWorkbook(month: string, rows: MonthlyRow[], records: AbsenRecord[]) {
+export async function buildMonthWorkbook(month: string, rows: MonthlyRow[], records: AbsenRecord[], karyawan: Karyawan[]) {
+  const info = infoFrom(karyawan);
   const wb = new ExcelJS.Workbook();
   wb.creator = APP.name;
   const label = monthLabel(month);

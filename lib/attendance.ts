@@ -66,11 +66,12 @@ export async function deleteAbsen(date: string, id: string) {
 export async function buildDailyReport(date: string): Promise<DailyReport> {
   const records = await getDayRecords(date);
   const done = new Set(records.map((r) => r.id));
+  const active = await activeKaryawan();
   return {
     date,
     dateLabel: dateLabel(date),
     cabang: CABANG.map((c) => {
-      const team = activeKaryawan().filter((k) => k.cabang === c.id);
+      const team = active.filter((k) => k.cabang === c.id);
       return {
         id: c.id,
         name: c.name,
@@ -92,7 +93,7 @@ export async function buildDailyReport(date: string): Promise<DailyReport> {
 export async function buildMonthlyRows(month: string): Promise<MonthlyRow[]> {
   const records = await getMonthRecords(month);
   const rows = new Map<string, MonthlyRow>();
-  for (const k of activeKaryawan()) rows.set(k.id, { id: k.id, name: k.name, present: 0, lateCount: 0, lateMinutes: 0 });
+  for (const k of await activeKaryawan()) rows.set(k.id, { id: k.id, name: k.name, present: 0, lateCount: 0, lateMinutes: 0 });
   for (const r of records) {
     const row = rows.get(r.id) ?? { id: r.id, name: r.name, present: 0, lateCount: 0, lateMinutes: 0 };
     row.present++;

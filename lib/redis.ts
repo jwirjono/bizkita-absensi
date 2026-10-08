@@ -14,6 +14,8 @@ export function redis() {
 
 /** All Redis key names in one place. */
 export const KEYS = {
+  karyawan: "karyawan", // hash, field = karyawan id → Karyawan
+  karyawanSeeded: "karyawan:seeded", // set once the old config list has been imported
   enrolled: "faces:enrolled", // set of karyawan ids with face data
   face: (id: string) => `face:${id}`, // FaceRecord
   facePhoto: (id: string) => `facephoto:${id}`, // small jpeg data URL

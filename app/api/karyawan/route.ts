@@ -13,7 +13,7 @@ export const GET = handle(async () => {
   const [enrolled, records] = await Promise.all([enrolledIds(), getDayRecords(today.date)]);
   return ok({
     today: today.date,
-    karyawan: activeKaryawan().map((k) => {
+    karyawan: (await activeKaryawan()).map((k) => {
       const r = records.find((x) => x.id === k.id);
       const s = scheduleFor(k);
       const opensAt = toMinutes(s.openTime) - ABSEN.opensMinutesBefore;

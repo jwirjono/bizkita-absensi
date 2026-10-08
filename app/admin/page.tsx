@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import BrandHeader from "@/components/BrandHeader";
+import KaryawanForm, { type KaryawanInput } from "@/components/KaryawanForm";
 
 type Rec = { id: string; name: string; time: string; openTime: string; cabangId: string; late: boolean; lateMinutes: number; distanceMeters: number; faceDistance: number };
 type Row = { id: string; name: string; present: number; lateCount: number; lateMinutes: number };
 type Overview = {
   today: string;
   cabang: { id: string; name: string; openTime: string; toleranceMinutes: number; radiusMeters: number }[];
-  karyawan: { id: string; name: string; cabangName: string; openTime: string; toleranceMinutes: number; enrolled: boolean }[];
+  karyawan: (KaryawanInput & { id: string; cabangName: string; effectiveOpenTime: string; effectiveTolerance: number; enrolled: boolean })[];
 };
 
 const PIN_KEY = "absensi:adminPin";
@@ -26,6 +27,7 @@ export default function Admin() {
   const [notYet, setNotYet] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Row[]>([]);
   const [photos, setPhotos] = useState<Record<string, string | null>>({});
+  const [editing, setEditing] = useState<string | null>(null); // "new", a karyawan id, or null
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null);
   const [wa, setWa] = useState<{ targets: { label: string; target: string }[]; groups: { id: string; name: string }[]; groupError: string | null } | null>(null);
 
@@ -85,8 +87,8 @@ export default function Admin() {
     api(`?action=month&month=${month}`).then((r) => r.ok && setRows(r.rows));
   }, [authed, month, api]);
 
-  async function act(body: object, confirmText?: string) {
-    if (confirmText && !confirm(confirmText)) return;
+  async function act(body: object, confirmText?: string): Promise<boolean> {
+    if (confirmText && !confirm(confirmText)) return false;
     setNotice({ text: "Memproses…" });
     const r = await api("", body);
     setNotice({ text: r.ok ? r.message : r.error, error: !r.ok });
@@ -96,6 +98,13 @@ export default function Admin() {
       if (d.ok) (setRecords(d.records), setNotYet(notYetByCabang(d.report)));
       if (m.ok) setRows(m.rows);
     }
+    return !!r.ok;
+  }
+
+  async function saveKaryawan(value: KaryawanInput) {
+    const saved = await act({ action: "saveKaryawan", ...value });
+    if (saved) setEditing(null);
+    return saved;
   }
 
   async function exportExcel() {
@@ -219,30 +228,65 @@ export default function Admin() {
       </section>
 
       <section className="card">
-        <h2>Karyawan dan data wajah</h2>
-        <p className="muted">Tambah, hapus, atau ubah cabang dan jam masuk karyawan di config/app.config.ts.</p>
+        <div className="row">
+          <h2>Karyawan</h2>
+          {editing === null && (
+            <button className="small" onClick={() => setEditing("new")}>
+              + Tambah karyawan
+            </button>
+          )}
+        </div>
+        {editing === "new" && overview && (
+          <KaryawanForm cabang={overview.cabang} onSave={saveKaryawan} onCancel={() => setEditing(null)} />
+        )}
+        {overview?.karyawan.length === 0 && <p className="muted">Belum ada karyawan. Tambah lewat tombol di atas.</p>}
         {overview?.karyawan.map((k) => (
-          <div key={k.id}>
-            <div className="line">
-              <span>{k.name}</span>
-              <span className="muted small-text">
-                {k.cabangName} · {k.openTime} (+{k.toleranceMinutes}m)
-              </span>
-              <span className={k.enrolled ? "tag ok" : "tag"}>{k.enrolled ? "wajah terdaftar" : "belum daftar"}</span>
-              {k.enrolled && (
-                <>
-                  <button className="ghost small" onClick={() => togglePhoto(k.id)}>
-                    {k.id in photos ? "Tutup foto" : "Lihat foto"}
+          <div key={k.id} className={`karyawan-row ${k.active ? "" : "inactive"}`}>
+            {editing === k.id ? (
+              <KaryawanForm cabang={overview.cabang} initial={k} onSave={saveKaryawan} onCancel={() => setEditing(null)} />
+            ) : (
+              <div className="karyawan-line">
+                <div className="karyawan-info">
+                  <span className="karyawan-name">{k.name}</span>
+                  <span className="muted small-text">
+                    {k.cabangName} · masuk {k.effectiveOpenTime} · toleransi {k.effectiveTolerance}m
+                  </span>
+                  <span className="tags">
+                    {!k.active && <span className="tag">nonaktif</span>}
+                    <span className={k.enrolled ? "tag ok" : "tag"}>{k.enrolled ? "wajah terdaftar" : "belum daftar wajah"}</span>
+                  </span>
+                </div>
+                <div className="karyawan-actions">
+                  <button className="ghost small" onClick={() => setEditing(k.id)}>
+                    Edit
                   </button>
+                  {k.enrolled && (
+                    <>
+                      <button className="ghost small" onClick={() => togglePhoto(k.id)}>
+                        {k.id in photos ? "Tutup foto" : "Lihat foto"}
+                      </button>
+                      <button
+                        className="ghost small"
+                        onClick={() => act({ action: "resetFace", id: k.id }, `Reset wajah ${k.name}? Dia harus daftar ulang.`)}
+                      >
+                        Reset wajah
+                      </button>
+                    </>
+                  )}
                   <button
-                    className="ghost small"
-                    onClick={() => act({ action: "resetFace", id: k.id }, `Reset wajah ${k.name}? Dia harus daftar ulang.`)}
+                    className="ghost small danger"
+                    onClick={() =>
+                      act(
+                        { action: "deleteKaryawan", id: k.id },
+                        `Hapus ${k.name}? Data wajahnya ikut dihapus. Riwayat absen tetap tersimpan.\n\nTips: kalau hanya berhenti sementara, pakai Edit → hilangkan centang Aktif.`,
+                      )
+                    }
                   >
-                    Reset wajah
+                    Hapus
                   </button>
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+            )}
             {k.id in photos &&
               (photos[k.id] ? (
                 // eslint-disable-next-line @next/next/no-img-element

@@ -12,7 +12,7 @@ import { sendWhatsApp } from "@/lib/whatsapp";
 /** Absen masuk: verify GPS → verify face → save (once per day) → WhatsApp if telat. */
 export const POST = handle(async (req) => {
   const body = await req.json().catch(() => ({}));
-  const k = findKaryawan(body.id);
+  const k = await findKaryawan(body.id);
   if (!k) return fail("Karyawan tidak ditemukan.");
   const { cabang, openTime, toleranceMinutes } = scheduleFor(k);
   const now = nowParts();

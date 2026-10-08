@@ -10,7 +10,7 @@ Simple attendance app: pick name → selfie (face match) + GPS → on time / tel
 | What | File |
 |---|---|
 | Cabang (location, radius, jam buka, toleransi) | `config/app.config.ts` → `CABANG` |
-| Karyawan list | `config/app.config.ts` → `KARYAWAN` |
+| Karyawan list | `/admin` → Karyawan |
 | WhatsApp group per cabang | `config/app.config.ts` → `CABANG[].whatsappGroup` |
 | Rekap telat group and time (12:00) | `config/app.config.ts` → `WHATSAPP.rekapTelat` |
 | Absen opens X minutes before jam masuk | `config/app.config.ts` → `ABSEN.opensMinutesBefore` |
@@ -20,20 +20,17 @@ Simple attendance app: pick name → selfie (face match) + GPS → on time / tel
 
 After editing a file: commit and push. Vercel redeploys automatically.
 
-### Adding a karyawan
-Add a line to `KARYAWAN` in `config/app.config.ts`:
+### Karyawan
+Managed on `/admin` → **Karyawan** (stored in the database, not in a config file):
+- **+ Tambah karyawan:** name, cabang, optional own jam masuk and toleransi (empty = follow the cabang).
+- **Edit:** change any of those, or untick **Aktif** to hide someone without losing history.
+- **Hapus:** removes the karyawan and their face data. Absen history stays in reports.
 
-```ts
-{ id: "rina", name: "Rina", cabang: "rancabolang", active: true },                    // uses cabang jam buka
-{ id: "dodi", name: "Dodi", cabang: "tubagus", openTime: "13:00", active: true },     // own jam masuk
-```
+They can only absen at their own cabang, and telat is counted from their own jam masuk (or the cabang's).
+New karyawan register their face on first use.
 
-They can only absen at their own cabang, and telat is counted from their own `openTime` (or the cabang's if not set).
-They'll appear in the dropdown and register their face on first use. A typo in the cabang id fails the build,
-so a broken config never goes live.
-
-### Removing a karyawan
-Set `active: false` (keeps their history in reports). Then reset their face in `/admin`.
+`lib/seed-karyawan.ts` imported the old config list once (same ids, so existing face data and absen history stay linked).
+After the first deploy it can be deleted together with the `seedOnce` calls in `lib/karyawan.ts`.
 
 ## First-time setup
 

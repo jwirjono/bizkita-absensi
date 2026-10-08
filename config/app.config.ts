@@ -67,32 +67,9 @@ export const CABANG: Cabang[] = [
 
 // ------------------------------------------------------------
 // 3. KARYAWAN
-//    - id: short, unique, never change it once used (face data is stored under it).
-//    - name: shown in the dropdown and WhatsApp messages.
-//    - cabang: the cabang id (from CABANG above) this karyawan works at.
-//      They can ONLY absen at this cabang (GPS check).
-//    - openTime (optional): this karyawan's own jam masuk. Leave it out to use the cabang's openTime.
-//    - toleranceMinutes (optional): own tolerance. Leave it out to use the cabang's.
-//    - active: set false to hide someone without deleting their history.
+//    Karyawan are managed on /admin → "Karyawan" (add, edit, deactivate, delete).
+//    They are stored in the database, not in this file.
 // ------------------------------------------------------------
-export type Karyawan = {
-  id: string;
-  name: string;
-  cabang: string;
-  openTime?: string;
-  toleranceMinutes?: number;
-  active: boolean;
-};
-
-export const KARYAWAN: Karyawan[] = [
-  { id: "bryan", name: "Bryan", cabang: "tubagus", active: true },
-  { id: "galih", name: "Galih", cabang: "tubagus", active: true },
-  { id: "didi", name: "Didi", cabang: "tubagus", active: true },
-  { id: "septian", name: "Septian", cabang: "tubagus", openTime: "11:00", active: true },
-  { id: "duki", name: "Duki", cabang: "rancabolang", active: true },
-  { id: "feriyan", name: "Feriyan", cabang: "rancabolang", active: true },
-  // { id: "rina", name: "Rina", cabang: "rancabolang", openTime: "13:00", toleranceMinutes: 10, active: true },
-];
 
 // ------------------------------------------------------------
 // 4. FACE RECOGNITION

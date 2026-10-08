@@ -170,3 +170,26 @@ button.small { padding: 5px 9px; font-size: 13px; border-radius: 9px; }
   .line { gap: 6px; font-size: 13px; }
   .wa-line { grid-template-columns: 1fr; }
 }
+
+/* ---------- Karyawan admin ---------- */
+input[type="text"], input[type="time"], input[type="number"] {
+  font: inherit; color: inherit; background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 12px; width: 100%; outline: none;
+}
+.karyawan-form {
+  display: grid; gap: 12px; padding: 14px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 14px; background: color-mix(in srgb, var(--accent) 4%, var(--card));
+}
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.form-grid label { display: grid; gap: 6px; }
+.hint { font-size: 12px; font-weight: 400; color: var(--muted); }
+button.link { border: none; background: none; padding: 0; font-size: 12px; font-weight: 500; color: var(--accent); text-decoration: underline; }
+button.compact { padding: 10px 22px; font-size: 15px; }
+button.danger:hover:not(:disabled) { color: var(--late-text); }
+.karyawan-row { border-bottom: 1px solid var(--border); padding: 10px 0; }
+.karyawan-row.inactive .karyawan-name { color: var(--muted); text-decoration: line-through; }
+.karyawan-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.karyawan-info { display: grid; gap: 3px; min-width: 0; }
+.karyawan-name { font-weight: 700; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.karyawan-actions { display: flex; flex-wrap: wrap; gap: 2px; }
