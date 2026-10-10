@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import AdminPush from "@/components/AdminPush";
 import BrandHeader from "@/components/BrandHeader";
 import KaryawanForm, { type KaryawanInput } from "@/components/KaryawanForm";
 
@@ -23,6 +24,13 @@ export default function Admin() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [date, setDate] = useState("");
   const [month, setMonth] = useState("");
+  // Rekap period: a whole month by default, or a custom date range.
+  const [rangeMode, setRangeMode] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [periodLabel, setPeriodLabel] = useState("");
+  const rangeInvalid = rangeMode && (!from || !to || from > to);
+  const periodQuery = rangeMode ? `from=${from}&to=${to}` : `month=${month}`;
   const [records, setRecords] = useState<Rec[]>([]);
   const [notYet, setNotYet] = useState<Record<string, string[]>>({});
   const [rows, setRows] = useState<Row[]>([]);
@@ -83,9 +91,11 @@ export default function Admin() {
   }, [authed, date, api]);
 
   useEffect(() => {
-    if (!authed || !month) return;
-    api(`?action=month&month=${month}`).then((r) => r.ok && setRows(r.rows));
-  }, [authed, month, api]);
+    if (!authed || !month || rangeInvalid) return;
+    api(`?action=month&${periodQuery}`).then((r) => {
+      if (r.ok) (setRows(r.rows), setPeriodLabel(r.label));
+    });
+  }, [authed, month, api, periodQuery, rangeInvalid]);
 
   async function act(body: object, confirmText?: string): Promise<boolean> {
     if (confirmText && !confirm(confirmText)) return false;
@@ -93,7 +103,7 @@ export default function Admin() {
     const r = await api("", body);
     setNotice({ text: r.ok ? r.message : r.error, error: !r.ok });
     if (r.ok) {
-      const [o, d, m] = await Promise.all([api("?action=overview"), api(`?action=day&date=${date}`), api(`?action=month&month=${month}`)]);
+      const [o, d, m] = await Promise.all([api("?action=overview"), api(`?action=day&date=${date}`), api(`?action=month&${periodQuery}`)]);
       if (o.ok) setOverview(o);
       if (d.ok) (setRecords(d.records), setNotYet(notYetByCabang(d.report)));
       if (m.ok) setRows(m.rows);
@@ -108,10 +118,11 @@ export default function Admin() {
   }
 
   async function exportExcel() {
-    const res = await fetch(`/api/admin?action=excel&month=${month}`, { headers: { "x-admin-pin": pin } });
+    if (rangeInvalid) return setNotice({ text: "Tanggal awal harus sebelum tanggal akhir.", error: true });
+    const res = await fetch(`/api/admin?action=excel&${periodQuery}`, { headers: { "x-admin-pin": pin } });
     if (!res.ok) return setNotice({ text: "Gagal export.", error: true });
     const url = URL.createObjectURL(await res.blob());
-    const a = Object.assign(document.createElement("a"), { href: url, download: `absensi-${month}.xlsx` });
+    const a = Object.assign(document.createElement("a"), { href: url, download: rangeMode ? `absensi-${from}_${to}.xlsx` : `absensi-${month}.xlsx` });
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -202,9 +213,42 @@ export default function Admin() {
 
       <section className="card">
         <div className="row">
-          <h2>Rekap bulanan</h2>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+          <h2>{rangeMode ? "Rekap periode" : "Rekap bulanan"}</h2>
+          {!rangeMode && <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />}
         </div>
+        <div className="row gap">
+          {rangeMode ? (
+            <>
+              <label className="inline-field">
+                Dari <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+              </label>
+              <label className="inline-field">
+                Sampai <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+              </label>
+              <button className="ghost small" onClick={() => setRangeMode(false)}>
+                Kembali ke bulanan
+              </button>
+            </>
+          ) : (
+            <button
+              className="ghost small"
+              onClick={() => {
+                // start the custom range from the selected month
+                const [y, m] = month.split("-").map(Number);
+                setFrom(`${month}-01`);
+                setTo(`${month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`);
+                setRangeMode(true);
+              }}
+            >
+              Pilih rentang tanggal
+            </button>
+          )}
+        </div>
+        {rangeInvalid ? (
+          <p className="note error">Tanggal awal harus sebelum (atau sama dengan) tanggal akhir.</p>
+        ) : (
+          periodLabel && <p className="muted">Periode: {periodLabel}</p>
+        )}
         <div className="line head-line">
           <span>Nama</span>
           <span>Hadir</span>
@@ -222,7 +266,7 @@ export default function Admin() {
             </div>
           ))}
         <div className="row gap">
-          <button onClick={() => act({ action: "sendMonthly", month })}>Kirim rekap bulanan ke grup</button>
+          {!rangeMode && <button onClick={() => act({ action: "sendMonthly", month })}>Kirim rekap bulanan ke grup</button>}
           <button onClick={exportExcel}>Download Excel</button>
         </div>
       </section>
@@ -297,6 +341,8 @@ export default function Admin() {
           </div>
         ))}
       </section>
+
+      <AdminPush api={api} notify={(text, error) => setNotice({ text, error })} />
 
       <section className="card">
         <h2>WhatsApp</h2>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import BrandHeader from "@/components/BrandHeader";
 import Camera from "@/components/Camera";
+import PushToggle from "@/components/PushToggle";
 import { APP, FACE } from "@/config/app.config";
 import { TERMS_OF_USE } from "@/config/messages";
 import { checkFace, getPosition, loadFaceApi, sleep, snapshot } from "@/lib/face-client";
@@ -253,6 +254,7 @@ export default function Home() {
             <button className="primary" onClick={next} disabled={!people}>
               Lanjut
             </button>
+            {person && <PushToggle key={person.id} karyawanId={person.id} name={person.name} />}
           </>
         )}
 
@@ -313,12 +315,15 @@ export default function Home() {
             <button className="primary" onClick={reset}>
               Selesai
             </button>
+            {person && <PushToggle key={person.id} karyawanId={person.id} name={person.name} />}
           </>
         )}
 
         {msg && <p className={`note ${msg.error ? "error" : ""}`}>{msg.text}</p>}
       </section>
-      <p className="footer">© Barberworks · {APP.timezoneLabel}</p>
+      <p className="footer">
+        © Barberworks · <a href="/admin">Admin</a>
+      </p>
     </main>
   );
 }

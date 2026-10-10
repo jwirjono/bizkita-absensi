@@ -79,3 +79,44 @@ export function lateAlertMessage(p: { name: string; cabang: string; openTime: st
 export function enrollAlertMessage(p: { name: string; time: string }) {
   return `🆕 Wajah baru didaftarkan: *${p.name}* (${p.time}).\nJika ini bukan ${p.name}, reset di halaman admin.`;
 }
+
+// ------------------------------------------------------------
+// Phone notifications (web push). Keep them short: a phone shows ~2 lines.
+// ------------------------------------------------------------
+
+export function pushOpenMessage(p: { cabang: string; openTime: string; cutoff: string }) {
+  return {
+    title: "⏰ Jangan lupa absen",
+    body: `${p.cabang} masuk jam ${p.openTime}. Absen sebelum ${p.cutoff} supaya tidak telat.`,
+    url: "/",
+    tag: "absen-reminder",
+  };
+}
+
+export function pushCutoffMessage(p: { cabang: string; cutoff: string }) {
+  return {
+    title: "⚠️ Kamu belum absen",
+    body: `Batas ${p.cutoff} di ${p.cabang} sudah lewat. Absen sekarang, tetap dicatat (telat).`,
+    url: "/",
+    tag: "absen-reminder",
+  };
+}
+
+export function pushRekapMessage(r: DailyReport) {
+  const late = r.cabang.flatMap((c) => c.people.filter((p) => p.record?.late).map((p) => `${p.name} ${p.record!.lateMinutes}m`));
+  const notYet = r.cabang.flatMap((c) => c.notYet);
+  const parts = [late.length ? `${late.length} telat: ${late.join(", ")}` : "Tidak ada yang telat"];
+  if (notYet.length) parts.push(`Belum absen: ${notYet.join(", ")}`);
+  return { title: `📋 Rekap telat ${r.dateLabel}`, body: parts.join(" · "), url: "/admin", tag: "rekap" };
+}
+
+export function pushMonthlyMessage(monthLabel: string, rows: MonthlyRow[]) {
+  const total = rows.reduce((s, r) => s + r.lateCount, 0);
+  const top = [...rows].filter((r) => r.lateCount).sort((a, b) => b.lateCount - a.lateCount).slice(0, 3);
+  return {
+    title: `📊 Rekap bulan ${monthLabel}`,
+    body: `Total ${total}x telat.${top.length ? " Terbanyak: " + top.map((r) => `${r.name} ${r.lateCount}x`).join(", ") + "." : ""} Buka admin untuk Excel.`,
+    url: "/admin",
+    tag: "rekap-bulanan",
+  };
+}

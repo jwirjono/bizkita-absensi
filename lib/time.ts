@@ -73,5 +73,17 @@ export function monthLabel(month: string) {
   );
 }
 
+/** "2026-10-01".."2026-10-31" → "Oktober 2026"; otherwise "1 Okt 2026 – 15 Okt 2026". */
+export function rangeLabel(from: string, to: string) {
+  const [y, m] = from.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  if (from.slice(0, 7) === to.slice(0, 7) && from.endsWith("-01") && Number(to.slice(8)) === lastDay) return monthLabel(from.slice(0, 7));
+  const fmt = (d: string) => {
+    const [yy, mm, dd] = d.split("-").map(Number);
+    return new Intl.DateTimeFormat("id-ID", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(Date.UTC(yy, mm - 1, dd)));
+  };
+  return from === to ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
+}
+
 export const isDate = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 export const isMonth = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}$/.test(s);

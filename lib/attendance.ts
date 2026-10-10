@@ -90,8 +90,24 @@ export async function buildDailyReport(date: string): Promise<DailyReport> {
   };
 }
 
+/** All absen between two dates (inclusive), across months. */
+export async function getRangeRecords(from: string, to: string) {
+  const months: string[] = [];
+  for (let m = from.slice(0, 7); m <= to.slice(0, 7) && months.length < 24; m = shiftMonth(m, 1)) months.push(m);
+  const all = (await Promise.all(months.map(getMonthRecords))).flat();
+  return all.filter((r) => r.date >= from && r.date <= to);
+}
+
 export async function buildMonthlyRows(month: string): Promise<MonthlyRow[]> {
-  const records = await getMonthRecords(month);
+  return rowsFromRecords(await getMonthRecords(month));
+}
+
+export async function buildRangeRows(from: string, to: string): Promise<MonthlyRow[]> {
+  return rowsFromRecords(await getRangeRecords(from, to));
+}
+
+/** Per-karyawan totals (every active karyawan is listed, even with 0 absen). */
+async function rowsFromRecords(records: AbsenRecord[]): Promise<MonthlyRow[]> {
   const rows = new Map<string, MonthlyRow>();
   for (const k of await activeKaryawan()) rows.set(k.id, { id: k.id, name: k.name, present: 0, lateCount: 0, lateMinutes: 0 });
   for (const r of records) {

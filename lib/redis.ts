@@ -16,6 +16,7 @@ export function redis() {
 export const KEYS = {
   karyawan: "karyawan", // hash, field = karyawan id → Karyawan
   karyawanSeeded: "karyawan:seeded", // set once the old config list has been imported
+  push: "push", // hash, field = subscription id → PushRecord (phones with notifications on)
   enrolled: "faces:enrolled", // set of karyawan ids with face data
   face: (id: string) => `face:${id}`, // FaceRecord
   facePhoto: (id: string) => `facephoto:${id}`, // small jpeg data URL

@@ -63,6 +63,18 @@ After the first deploy it can be deleted together with the `seedOnce` calls in `
 Instant late/new-face alerts are off (`WHATSAPP.sendLateAlert`, `sendEnrollAlert`).
 Fonnte free plan: 1,000 messages/month, with a small Fonnte watermark. Lite (Rp 25k) removes it.
 
+## Phone notifications (web push)
+
+Free notifications from the site itself, no WhatsApp needed. Settings: `config/app.config.ts` → `PUSH`.
+- **Karyawan:** pick name on the absen page → **Aktifkan pengingat absen**. They get a reminder at their own jam masuk and at
+  the telat cutoff, only if they haven't absen yet.
+- **Admin:** `/admin` → **Notifikasi HP** → **Aktifkan notifikasi admin di HP ini**. Gets the rekap at `PUSH.adminRekapTime`
+  (+ monthly recap on the last day). "Kirim tes" checks it works; the list shows every registered phone.
+- **iPhone (iOS 16.4+):** open the site in Safari → Share → **Add to Home Screen** → open **Absensi** from the icon → then tap Aktifkan.
+- **Server:** set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in Vercel (generated once, see `.env.example`).
+- **Scheduler:** because each karyawan can have their own jam masuk, call `/api/cron/notify` every 5 minutes
+  (cron-job.org crontab `*/5 6-13 * * *`, timezone Asia/Jakarta).
+
 ## How it works
 
 - **Automatic photo:** the camera checks frames continuously and takes the photo by itself once the face is

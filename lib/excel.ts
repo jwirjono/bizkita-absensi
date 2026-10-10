@@ -2,7 +2,6 @@ import ExcelJS from "exceljs";
 import { APP } from "@/config/app.config";
 import type { AbsenRecord, MonthlyRow } from "./attendance";
 import { scheduleFor, type Karyawan } from "./karyawan";
-import { monthLabel } from "./time";
 
 const RED_FILL = "FFF8D7D7";
 const RED_TEXT = "FF9B1C1C";
@@ -51,11 +50,11 @@ const toDate = (ymd: string) => {
  *   Tab 1 "Daftar Absen": every absen, per day; rows striped red when telat.
  *   Tab 2 "Rekap":        totals per karyawan.
  */
-export async function buildMonthWorkbook(month: string, rows: MonthlyRow[], records: AbsenRecord[], karyawan: Karyawan[]) {
+/** label: period shown in the sheet titles, e.g. "Oktober 2026" or "1 Okt 2026 – 15 Okt 2026". */
+export async function buildMonthWorkbook(label: string, rows: MonthlyRow[], records: AbsenRecord[], karyawan: Karyawan[]) {
   const info = infoFrom(karyawan);
   const wb = new ExcelJS.Workbook();
   wb.creator = APP.name;
-  const label = monthLabel(month);
   const dayName = new Intl.DateTimeFormat("id-ID", { timeZone: "UTC", weekday: "long" });
 
   // ---- Tab 1: Daftar Absen ----

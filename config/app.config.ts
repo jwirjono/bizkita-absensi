@@ -120,8 +120,9 @@ export const ABSEN = {
 };
 
 // ------------------------------------------------------------
-// 7. WHATSAPP (via Fonnte — token in Vercel env FONNTE_TOKEN)
-//    Exactly these messages are sent, each once a day:
+// 7. WHATSAPP (via Fonnte — token in Vercel env FONNTE_TOKEN) — currently OFF
+//    (the sender number was restricted; notifications now go via PUSH below).
+//    When switched on, exactly these messages are sent, each once a day:
 //      a) Each cabang, at its openTime → its own whatsappGroup (set in CABANG above):
 //         reminder link + absen list of that cabang.
 //      a2) Each cabang, at openTime + toleranceMinutes (telat cutoff) → same group:
@@ -134,10 +135,10 @@ export const ABSEN = {
 // ------------------------------------------------------------
 export const WHATSAPP = {
   appUrl: "https://bizkita-absensi.vercel.app/",
-  sendOpeningMessage: true,
-  sendCutoffMessage: true,
+  sendOpeningMessage: false,
+  sendCutoffMessage: false,
   rekapTelat: {
-    enabled: true,
+    enabled: false,
     time: "12:00",
     group: "120363421683129635@g.us", // e.g. "120363012345678901@g.us"
     includeMonthlyOnLastDay: true,
@@ -149,7 +150,24 @@ export const WHATSAPP = {
 };
 
 // ------------------------------------------------------------
-// 8. DATA RETENTION
+// 8. PHONE NOTIFICATIONS (web push from this site — free, no WhatsApp)
+//    Each phone turns them on once ("Aktifkan pengingat" on the absen page, or on /admin).
+//    Sent by the same scheduler (/api/cron/notify), each once a day:
+//      remindAtOpen:   at the karyawan's own jam masuk, only if they haven't absen yet
+//      remindAtCutoff: at jam masuk + toleransi, only if they still haven't absen
+//      adminRekapTime: rekap telat to admin phones (+ monthly recap on the last day)
+// ------------------------------------------------------------
+export const PUSH = {
+  enabled: true,
+  remindAtOpen: true,
+  remindAtCutoff: true,
+  adminRekap: true,
+  adminRekapTime: "12:00",
+  adminMonthlyOnLastDay: true,
+};
+
+// ------------------------------------------------------------
+// 9. DATA RETENTION
 //    Absen data is stored per month. On the last day of each month,
 //    after the recap is sent, months older than this are deleted.
 //    1 = keep this month + last month.

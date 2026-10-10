@@ -1,6 +1,17 @@
-import { CABANG, WHATSAPP } from "@/config/app.config";
-import { cutoffMessage, monthlyRecapMessage, openingMessage, rekapTelatMessage } from "@/config/messages";
-import { buildDailyReport, buildMonthlyRows, cleanupOldMonths } from "@/lib/attendance";
+import { CABANG, PUSH, WHATSAPP } from "@/config/app.config";
+import {
+  cutoffMessage,
+  monthlyRecapMessage,
+  openingMessage,
+  pushCutoffMessage,
+  pushMonthlyMessage,
+  pushOpenMessage,
+  pushRekapMessage,
+  rekapTelatMessage,
+} from "@/config/messages";
+import { buildDailyReport, buildMonthlyRows, cleanupOldMonths, getDayRecords } from "@/lib/attendance";
+import { activeKaryawan, scheduleFor } from "@/lib/karyawan";
+import { allPush, sendPush } from "@/lib/push";
 import { fail, handle, ok } from "@/lib/http";
 import { KEYS, redis } from "@/lib/redis";
 import { fromMinutes, isLastDayOfMonth, monthLabel, nowParts, toMinutes } from "@/lib/time";
@@ -17,6 +28,10 @@ type Job = { key: string; time: string; until?: string; run: () => Promise<{ ok:
  *   - each cabang at its openTime → cabang group (reminder + absen list)
  *   - each cabang at openTime + toleranceMinutes → cabang group (cutoff + updated list)
  *   - rekap telat at WHATSAPP.rekapTelat.time → rekap group (+ monthly recap on the last day)
+ * Phone notifications (PUSH config), per karyawan who has notifications on:
+ *   - at their own jam masuk, and at jam masuk + toleransi, only if they haven't absen yet
+ *   - rekap at PUSH.adminRekapTime → admin phones
+ * On the last day of the month, old months are cleaned up (independent of any channel).
  */
 export const GET = handle(async (req) => {
   const secret = process.env.CRON_SECRET;
@@ -70,11 +85,51 @@ export const GET = handle(async (req) => {
         if (lastDay && rt.includeMonthlyOnLastDay) {
           text += "\n\n" + monthlyRecapMessage(monthLabel(now.month), await buildMonthlyRows(now.month));
         }
-        const r = await sendWhatsApp(rt.group, text);
-        if (r.ok && lastDay) await cleanupOldMonths(now.month);
-        return r;
+        return sendWhatsApp(rt.group, text);
       },
     });
+  }
+
+  if (PUSH.enabled) {
+    for (const k of await activeKaryawan()) {
+      const s = scheduleFor(k);
+      const cutoff = fromMinutes(toMinutes(s.openTime) + s.toleranceMinutes);
+      // Sends to this karyawan's phones, but only while they still haven't absen today.
+      const remind = (msg: ReturnType<typeof pushOpenMessage>) => async () => {
+        if ((await getDayRecords(now.date)).some((r) => r.id === k.id)) return { ok: true };
+        return sendPush((await allPush()).filter((p) => p.karyawanId === k.id), msg);
+      };
+      if (PUSH.remindAtOpen) {
+        jobs.push({
+          key: `push-open:${k.id}`,
+          time: s.openTime,
+          until: PUSH.remindAtCutoff ? cutoff : undefined,
+          run: remind(pushOpenMessage({ cabang: s.cabang.name, openTime: s.openTime, cutoff })),
+        });
+      }
+      if (PUSH.remindAtCutoff) {
+        jobs.push({ key: `push-cutoff:${k.id}`, time: cutoff, run: remind(pushCutoffMessage({ cabang: s.cabang.name, cutoff })) });
+      }
+    }
+    if (PUSH.adminRekap) {
+      jobs.push({
+        key: "push-rekap",
+        time: PUSH.adminRekapTime,
+        run: async () => {
+          const admins = (await allPush()).filter((p) => p.admin);
+          const r = await sendPush(admins, pushRekapMessage(await buildDailyReport(now.date)));
+          if (r.ok && PUSH.adminMonthlyOnLastDay && isLastDayOfMonth(now.date)) {
+            return sendPush(admins, pushMonthlyMessage(monthLabel(now.month), await buildMonthlyRows(now.month)));
+          }
+          return r;
+        },
+      });
+    }
+  }
+
+  if (isLastDayOfMonth(now.date)) {
+    // after the 12:00 rekap has been built from this month's data
+    jobs.push({ key: "cleanup", time: "13:00", run: async () => (await cleanupOldMonths(now.month), { ok: true }) });
   }
 
   const results: Record<string, string> = {};

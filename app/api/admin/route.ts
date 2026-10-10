@@ -1,12 +1,13 @@
 import { CABANG, WHATSAPP } from "@/config/app.config";
 import { cutoffMessage, monthlyRecapMessage, openingMessage, rekapTelatMessage } from "@/config/messages";
-import { buildDailyReport, buildMonthlyRows, deleteAbsen, getDayRecords, getMonthRecords } from "@/lib/attendance";
+import { buildDailyReport, buildMonthlyRows, buildRangeRows, deleteAbsen, getDayRecords, getRangeRecords } from "@/lib/attendance";
 import { buildMonthWorkbook } from "@/lib/excel";
 import { enrolledIds, resetFace } from "@/lib/face";
 import { fail, handle, isAdmin, ok } from "@/lib/http";
 import { allKaryawan, createKaryawan, deleteKaryawan, karyawanName, scheduleFor, updateKaryawan, validateKaryawan } from "@/lib/karyawan";
+import { allPush, deviceLabel, getPush, isPushSub, removePushById, savePush, sendPush } from "@/lib/push";
 import { KEYS, redis } from "@/lib/redis";
-import { fromMinutes, isDate, isMonth, monthLabel, nowParts, toMinutes } from "@/lib/time";
+import { fromMinutes, isDate, isMonth, monthLabel, nowParts, rangeLabel, toMinutes } from "@/lib/time";
 import { configuredTargets, listWhatsAppGroups, sendWhatsApp } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +16,23 @@ export const dynamic = "force-dynamic";
  * GET ?action=
  *   overview              → today, all karyawan (incl. inactive) + face status, cabang config
  *   day&date=YYYY-MM-DD   → records for a day
- *   month&month=YYYY-MM   → recap rows for a month
- *   excel&month=YYYY-MM   → Excel (.xlsx) download: Daftar Absen, Rekap
+ *   month&from=YYYY-MM-DD&to=YYYY-MM-DD → recap rows for a period (or &month=YYYY-MM)
+ *   excel&from=…&to=…     → Excel (.xlsx) download for that period: Daftar Absen, Rekap
  *   photo&id=             → enrollment photo
  *   whatsapp              → current WhatsApp targets + the sender's WhatsApp groups (with IDs)
+ *   push                  → phones with notifications on
  */
+/** Period from the query: from+to (dates), or a whole month. */
+function period(q: URLSearchParams) {
+  const from = q.get("from");
+  const to = q.get("to");
+  if (isDate(from) && isDate(to)) return from <= to ? { from, to } : null;
+  const month = q.get("month");
+  if (!isMonth(month)) return null;
+  const [y, m] = month.split("-").map(Number);
+  return { from: `${month}-01`, to: `${month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}` };
+}
+
 export const GET = handle(async (req) => {
   if (!isAdmin(req)) return fail("PIN admin salah.", 401);
   const q = new URL(req.url).searchParams;
@@ -48,25 +61,37 @@ export const GET = handle(async (req) => {
     return ok({ records: await getDayRecords(date), report: await buildDailyReport(date) });
   }
   if (action === "month") {
-    const month = q.get("month");
-    if (!isMonth(month)) return fail("Bulan tidak valid.");
-    return ok({ rows: await buildMonthlyRows(month), label: monthLabel(month) });
+    const p = period(q);
+    if (!p) return fail("Periode tidak valid. Tanggal awal harus sebelum tanggal akhir.");
+    return ok({ rows: await buildRangeRows(p.from, p.to), label: rangeLabel(p.from, p.to) });
   }
   if (action === "excel") {
-    const month = q.get("month");
-    if (!isMonth(month)) return fail("Bulan tidak valid.");
-    const [rows, records, karyawan] = await Promise.all([buildMonthlyRows(month), getMonthRecords(month), allKaryawan()]);
-    const file = await buildMonthWorkbook(month, rows, records, karyawan);
+    const p = period(q);
+    if (!p) return fail("Periode tidak valid.");
+    const [rows, records, karyawan] = await Promise.all([buildRangeRows(p.from, p.to), getRangeRecords(p.from, p.to), allKaryawan()]);
+    const file = await buildMonthWorkbook(rangeLabel(p.from, p.to), rows, records, karyawan);
+    const name = p.from.slice(0, 7) === p.to.slice(0, 7) && rangeLabel(p.from, p.to) === monthLabel(p.from.slice(0, 7)) ? p.from.slice(0, 7) : `${p.from}_${p.to}`;
     return new Response(file, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="absensi-${month}.xlsx"`,
+        "Content-Disposition": `attachment; filename="absensi-${name}.xlsx"`,
       },
     });
   }
   if (action === "whatsapp") {
     const g = await listWhatsAppGroups();
     return ok({ targets: configuredTargets(), groups: g.groups ?? [], groupError: g.error ?? null });
+  }
+  if (action === "push") {
+    const names = new Map((await allKaryawan()).map((k) => [k.id, k.name]));
+    const devices = (await allPush()).map((r) => ({
+      id: r.id,
+      device: r.device,
+      admin: r.admin,
+      karyawan: r.karyawanId ? (names.get(r.karyawanId) ?? r.karyawanId) : null,
+      createdAt: r.createdAt,
+    }));
+    return ok({ devices });
   }
   if (action === "photo") {
     const id = q.get("id") ?? "";
@@ -80,6 +105,9 @@ export const GET = handle(async (req) => {
  *   saveKaryawan   { id?, name, cabang, openTime?, toleranceMinutes?, active } → create (no id) or update
  *   deleteKaryawan { id }       → remove karyawan + face data (absen history is kept)
  *   resetFace   { id }          → delete face data so karyawan can onboard again
+ *   pushAdmin   { subscription, on } → this phone gets (or stops) the admin rekap notification
+ *   pushTest    { subscription }     → send a test notification to this phone
+ *   pushRemove  { id }               → remove a registered phone
  *   deleteAbsen { date, id }    → remove a wrong absen record
  *   sendOpening { date, cabangId, cutoff? } → send that cabang's absen list (or cutoff update) to its group now
  *   sendDaily   { date }           → send rekap telat to the rekap group now
@@ -107,6 +135,22 @@ export const POST = handle(async (req) => {
       await deleteKaryawan(body.id);
       return ok({ message: `${name} dihapus. Riwayat absen tetap tersimpan.` });
     }
+    case "pushAdmin": {
+      if (!isPushSub(body.subscription)) return fail("Data notifikasi tidak valid.");
+      await savePush(body.subscription, { admin: body.on !== false }, deviceLabel(req.headers.get("user-agent")));
+      return ok({ message: body.on === false ? "Notifikasi admin dimatikan di HP ini." : "Notifikasi admin aktif di HP ini." });
+    }
+    case "pushTest": {
+      if (!isPushSub(body.subscription)) return fail("Data notifikasi tidak valid.");
+      const rec = await getPush(body.subscription.endpoint);
+      if (!rec) return fail("HP ini belum terdaftar. Aktifkan notifikasi dulu.");
+      const r = await sendPush([rec], { title: "✅ Tes notifikasi", body: "Notifikasi Absensi Barberworks berhasil.", url: "/admin" });
+      return r.ok && r.sent ? ok({ message: "Tes terkirim. Cek notifikasi di HP ini." }) : fail(r.error ?? "Gagal kirim. Coba aktifkan ulang notifikasi.", 502);
+    }
+    case "pushRemove":
+      if (typeof body.id !== "string") return fail("id wajib diisi.");
+      await removePushById(body.id);
+      return ok({ message: "Perangkat dihapus dari notifikasi." });
     case "resetFace":
       if (typeof body.id !== "string") return fail("id wajib diisi.");
       await resetFace(body.id);
