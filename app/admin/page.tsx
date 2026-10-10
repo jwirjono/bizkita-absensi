@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AdminPush from "@/components/AdminPush";
 import BrandHeader from "@/components/BrandHeader";
+import WaShare from "@/components/WaShare";
 import KaryawanForm, { type KaryawanInput } from "@/components/KaryawanForm";
 
 type Rec = { id: string; name: string; time: string; openTime: string; cabangId: string; late: boolean; lateMinutes: number; distanceMeters: number; faceDistance: number };
@@ -33,6 +34,8 @@ export default function Admin() {
   const periodQuery = rangeMode ? `from=${from}&to=${to}` : `month=${month}`;
   const [records, setRecords] = useState<Rec[]>([]);
   const [notYet, setNotYet] = useState<Record<string, string[]>>({});
+  const [waText, setWaText] = useState<{ opening: Record<string, string>; cutoff: Record<string, string>; rekap: string } | null>(null);
+  const [loadedAt, setLoadedAt] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [photos, setPhotos] = useState<Record<string, string | null>>({});
   const [editing, setEditing] = useState<string | null>(null); // "new", a karyawan id, or null
@@ -80,15 +83,25 @@ export default function Admin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
+  const loadDay = useCallback(() => {
     if (!authed || !date) return;
     api(`?action=day&date=${date}`).then((r) => {
       if (r.ok) {
         setRecords(r.records);
         setNotYet(notYetByCabang(r.report));
+        setWaText(r.messages);
+        setLoadedAt(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }));
       }
     });
   }, [authed, date, api]);
+
+  useEffect(() => {
+    loadDay();
+    // Refresh when the admin comes back to this page (e.g. phone unlocked), so WhatsApp texts are current.
+    const onVisible = () => document.visibilityState === "visible" && loadDay();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loadDay]);
 
   useEffect(() => {
     if (!authed || !month || rangeInvalid) return;
@@ -105,7 +118,7 @@ export default function Admin() {
     if (r.ok) {
       const [o, d, m] = await Promise.all([api("?action=overview"), api(`?action=day&date=${date}`), api(`?action=month&${periodQuery}`)]);
       if (o.ok) setOverview(o);
-      if (d.ok) (setRecords(d.records), setNotYet(notYetByCabang(d.report)));
+      if (d.ok) (setRecords(d.records), setNotYet(notYetByCabang(d.report)), setWaText(d.messages));
       if (m.ok) setRows(m.rows);
     }
     return !!r.ok;
@@ -198,17 +211,21 @@ export default function Admin() {
                 </div>
               ))}
               <div className="row gap">
-                <button className="ghost small" onClick={() => act({ action: "sendOpening", date, cabangId: c.id })}>
-                  Kirim absensi {c.name} ke grupnya sekarang
-                </button>
-                <button className="ghost small" onClick={() => act({ action: "sendOpening", date, cabangId: c.id, cutoff: true })}>
-                  Kirim update batas telat {c.name}
-                </button>
+                <WaShare label={`Kirim absensi ${c.name} ke WhatsApp`} text={waText?.opening[c.id]} />
+                <WaShare label={`Kirim update batas telat ${c.name} ke WhatsApp`} text={waText?.cutoff[c.id]} />
               </div>
             </div>
           );
         })}
-        <button onClick={() => act({ action: "sendDaily", date })}>Kirim rekap telat ke grup sekarang</button>
+        <div className="row gap">
+          <WaShare label="Kirim rekap telat ke WhatsApp" text={waText?.rekap} />
+        </div>
+        <p className="muted small-text">
+          Tombol WhatsApp membuka WhatsApp dengan pesan siap kirim: pilih grupnya, lalu tap Kirim. Data per {loadedAt || "–"}{" "}
+          <button className="link" onClick={loadDay}>
+            muat ulang
+          </button>
+        </p>
       </section>
 
       <section className="card">

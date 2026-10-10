@@ -58,7 +58,19 @@ export const GET = handle(async (req) => {
   if (action === "day") {
     const date = q.get("date");
     if (!isDate(date)) return fail("Tanggal tidak valid.");
-    return ok({ records: await getDayRecords(date), report: await buildDailyReport(date) });
+    const report = await buildDailyReport(date);
+    // Ready-made WhatsApp texts for the "Kirim ke WhatsApp" buttons (sent by the admin from their own phone).
+    const messages = {
+      opening: Object.fromEntries(report.cabang.map((c) => [c.id, openingMessage(c, report.dateLabel, WHATSAPP.appUrl)])),
+      cutoff: Object.fromEntries(
+        report.cabang.map((c) => {
+          const cfg = CABANG.find((x) => x.id === c.id)!;
+          return [c.id, cutoffMessage(c, report.dateLabel, fromMinutes(toMinutes(cfg.openTime) + cfg.toleranceMinutes))];
+        }),
+      ),
+      rekap: rekapTelatMessage(report),
+    };
+    return ok({ records: await getDayRecords(date), report, messages });
   }
   if (action === "month") {
     const p = period(q);
